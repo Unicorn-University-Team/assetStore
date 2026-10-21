@@ -17,6 +17,24 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
+const WRITE_KEY_STORAGE = 'assetstore.writeKey'
+
+function loadWriteKey(): string {
+  try {
+    return localStorage.getItem(WRITE_KEY_STORAGE) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function saveWriteKey(value: string) {
+  try {
+    localStorage.setItem(WRITE_KEY_STORAGE, value)
+  } catch {
+    // Private mode or blocked storage: the key just is not remembered.
+  }
+}
+
 function AssetsDemo() {
   const [assets, setAssets] = useState<AssetPage | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -27,6 +45,7 @@ function AssetsDemo() {
   const [type, setType] = useState<AssetType>('3d')
   const [file, setFile] = useState<File | null>(null)
   const [fileInputKey, setFileInputKey] = useState(0)
+  const [writeKey, setWriteKey] = useState(loadWriteKey)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -52,7 +71,7 @@ function AssetsDemo() {
     setBusy(true)
     setError(null)
     try {
-      await uploadAsset({ name, description, type, file })
+      await uploadAsset({ name, description, type, file }, writeKey)
       setName('')
       setDescription('')
       setFile(null)
@@ -68,7 +87,7 @@ function AssetsDemo() {
   async function handleDelete(id: string) {
     setError(null)
     try {
-      await deleteAsset(id)
+      await deleteAsset(id, writeKey)
       await reload()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -78,6 +97,18 @@ function AssetsDemo() {
   return (
     <section className="card">
       <h2>Assets (test)</h2>
+
+      <input
+        className="write-key"
+        type="password"
+        placeholder="Write key (needed to upload and delete)"
+        value={writeKey}
+        onChange={(e) => {
+          setWriteKey(e.target.value)
+          saveWriteKey(e.target.value)
+        }}
+        autoComplete="off"
+      />
 
       <form className="upload" onSubmit={handleUpload}>
         <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={100} />

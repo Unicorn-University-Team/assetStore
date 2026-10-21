@@ -10,6 +10,11 @@ import { toAssetView } from '../views/asset.view';
 type IdParams = { id: string };
 
 const PAGE_SIZE = 20;
+const STORAGE_LIMIT_BYTES = env.maxStorageGb * 1024 ** 3;
+
+function storageFull(): HttpError {
+  return new HttpError(507, 'The storage limit is reached, no more files can be uploaded');
+}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function readName(value: unknown): string {
@@ -55,6 +60,9 @@ export const AssetController = {
 
   // multipart/form-data: name, description, type, file
   async create(req: Request, res: Response) {
+    // Refuse before reading the body when the storage is already full.
+    if ((await AssetModel.totalFileSize()) >= STORAGE_LIMIT_BYTES) throw storageFull();
+
     const { fields, file } = await receiveUpload(req, {
       fileField: 'file',
       maxBytes: env.maxUploadMb * 1024 * 1024,
@@ -63,6 +71,7 @@ export const AssetController = {
     if (!file) throw new HttpError(400, '"file" is required');
 
     try {
+      if ((await AssetModel.totalFileSize()) + file.size > STORAGE_LIMIT_BYTES) throw storageFull();
       const asset = await AssetModel.create({
         name: readName(fields.name),
         description: readDescription(fields.description),

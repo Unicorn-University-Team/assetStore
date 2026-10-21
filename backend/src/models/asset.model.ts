@@ -36,6 +36,12 @@ export const AssetModel = {
     return { items, total };
   },
 
+  // Size of all stored files together, in bytes.
+  async totalFileSize(): Promise<number> {
+    const result = await prisma.asset.aggregate({ _sum: { fileSize: true } });
+    return result._sum.fileSize ?? 0;
+  },
+
   findById(id: string): Promise<Asset | null> {
     return prisma.asset.findUnique({ where: { id } });
   },

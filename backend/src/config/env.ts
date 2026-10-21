@@ -17,4 +17,8 @@ export const env = {
   s3Bucket: required('S3_BUCKET'),
   awsRegion: process.env.AWS_REGION ?? 'eu-central-1',
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB) || 100,
+  // Upper limit for all asset files together; uploads are refused once it is reached.
+  maxStorageGb: Number(process.env.MAX_STORAGE_GB) || 5,
+  // Shared team key for upload, edit and delete until there are user accounts. Empty = writing is open.
+  writeKey: process.env.WRITE_KEY ?? '',
 };
