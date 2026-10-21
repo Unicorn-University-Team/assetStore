@@ -13,6 +13,7 @@ Web běží na **https://3-125-15-78.sslip.io** (dočasná adresa, dokud nemáme
 - [Ochrana zápisu](#ochrana-zápisu)
 - [Pravidla pro routy: frontend × backend](#pravidla-pro-routy-frontend--backend)
 - [API](#api)
+- [CI](#ci)
 - [Nasazení](#nasazení)
 
 ## Co kde leží
@@ -310,16 +311,50 @@ Asset v odpovědi (`backend/src/views/asset.view.ts`):
 }
 ```
 
+## CI
+
+Každý pull request a každý push do `main` zkontroluje GitHub Actions (`.github/workflows/ci.yml`). Výsledek je vidět
+v PR jako zelená nebo červená značka; pro veřejný repozitář je to zdarma.
+
+| Úloha | Co kontroluje |
+|---|---|
+| Backend | `npm ci`, platné schéma Prismy, migrace projdou na prázdné databázi, **schéma a migrace sedí**, `typecheck`, `build` |
+| Frontend | `npm ci`, `lint` (i varování jsou chyba), `build` |
+| Docker images | sestaví obraz backendu i frontendu stejně jako při nasazení |
+| Deploy | jen po mergi do `main` a jen když jsou všechny kontroly výše zelené: nasadí na server (viz [Nasazení](#nasazení)) |
+
+Když CI selže:
+
+- **„schema.prisma differs from the migrations“**: změnilo se `schema.prisma`, ale chybí migrace. Spustit
+  `npm run db:migrate -- --name <co-se-změnilo>` a složku z `prisma/migrations/` commitnout.
+- **Lint**: `npm run lint` ve `frontend/` ukáže totéž lokálně.
+- **Typecheck nebo build**: `npm run typecheck` / `npm run build` v příslušné složce.
+
+Lokálně stačí před pushnutím pustit stejné příkazy; detail chyby je v PR pod „Details“ u neúspěšné kontroly.
+
 ## Nasazení
 
 Server je AWS EC2, celý stack běží v Dockeru podle `docker-compose.yml`. Změny jdou do `main` přes pull request.
-Po mergi se na serveru spustí:
 
-```bash
-cd ~/assetStore && git pull && docker compose up -d --build
-```
+**Nasazení je automatické.** Po mergi do `main` proběhne CI a když jsou všechny kontroly zelené, úloha **Deploy**
+aktualizuje server:
 
-Backend při startu sám použije nové migrace databáze. Kontrola: `https://3-125-15-78.sslip.io/api/health`.
+1. GitHub Actions dostane od AWS dočasný přístup přes OIDC. V GitHubu nejsou uložené žádné AWS klíče a roli
+   `assetstore-github-deploy` může použít jen větev `main` tohoto repozitáře.
+2. Přes AWS SSM pošle serveru příkaz: posunout `main` přesně na otestovaný commit a spustit `deploy/deploy.sh`.
+   Port SSH zůstává zavřený.
+3. `deploy/deploy.sh` sestaví a restartuje kontejnery, počká, až je backend zdravý, a smaže staré obrazy, aby se
+   nezaplnil disk. Backend při startu sám použije nové migrace databáze.
+4. Úloha nakonec ověří `https://3-125-15-78.sslip.io/api/health`.
+
+Průběh a výsledek je vidět v záložce **Actions**, u commitu v `main` je zelená nebo červená značka. Nasazení jdou
+jedno po druhém, nikdy dvě najednou.
+
+Ručně (třeba po změně `.env` na serveru): `cd ~/assetStore && deploy/deploy.sh`.
+
+Nastavení v AWS pro automatické nasazení dělá jednorázově skript `deploy/aws/setup-github-deploy.sh` (spouští se
+v AWS CloudShell). V repozitáři jsou k tomu proměnné `AWS_DEPLOY_ROLE_ARN` a `DEPLOY_INSTANCE_ID`
+(Settings → Secrets and variables → Actions → Variables).
 
 Nastavení serveru je v `~/assetStore/.env`. Vzor je `.env.example`, samotný `.env` do gitu nepatří.
 

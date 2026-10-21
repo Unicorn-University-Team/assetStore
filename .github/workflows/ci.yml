@@ -1,0 +1,154 @@
+# Checks every pull request and every push to main; a push to main that passes all checks is deployed.
+# See README, sections "CI" and "Nasazení".
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A newer push to the same pull request cancels the run that is still going. Runs on main are never
+# cancelled, so a deploy is not cut off halfway.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://ci:ci@localhost:5432/ci
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install (also generates the Prisma client)
+        run: npm ci
+      - name: Prisma schema is valid
+        run: npx prisma validate
+      - name: Migrations apply to an empty database
+        run: npx prisma migrate deploy
+      - name: Schema and migrations match
+        run: |
+          npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code || {
+            echo "::error::schema.prisma differs from the migrations. Create one: npm run db:migrate -- --name <what-changed>"
+            exit 1
+          }
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build
+        run: npm run build
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Lint (warnings fail too)
+        run: npm run lint -- --deny-warnings
+      - name: Build
+        run: npm run build
+
+  docker:
+    name: Docker images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Backend image
+        uses: docker/build-push-action@v7
+        with:
+          context: backend
+          push: false
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+      - name: Frontend image (Caddy with the built site)
+        uses: docker/build-push-action@v7
+        with:
+          context: frontend
+          push: false
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+  deploy:
+    name: Deploy
+    # Only pushes to main (= merged pull requests), and only when all checks above passed.
+    needs: [backend, frontend, docker]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # lets the job get temporary AWS credentials through OIDC, no keys stored in GitHub
+    env:
+      SITE_URL: https://3-125-15-78.sslip.io
+    steps:
+      # The role (deploy/aws/setup-github-deploy.sh) accepts only the main branch of this repository
+      # and may only send a command to the server.
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: eu-central-1
+      - name: Update the server
+        env:
+          INSTANCE_ID: ${{ vars.DEPLOY_INSTANCE_ID }}
+        run: |
+          # On the server: one deploy at a time, move main to exactly this commit, rebuild (deploy/deploy.sh).
+          COMMAND="sudo -u ubuntu -H flock /tmp/assetstore-deploy.lock bash -c 'cd ~/assetStore && git fetch -q origin main && git merge -q --ff-only $GITHUB_SHA && deploy/deploy.sh'"
+          jq -n --arg command "$COMMAND" '{commands: [$command], executionTimeout: ["1800"]}' > ssm-params.json
+          ID=$(aws ssm send-command --instance-ids "$INSTANCE_ID" --document-name AWS-RunShellScript \
+            --comment "Deploy ${GITHUB_SHA::7}" --parameters file://ssm-params.json --query Command.CommandId --output text)
+          echo "SSM command $ID"
+
+          STATUS=Pending
+          for _ in $(seq 1 120); do
+            sleep 10
+            STATUS=$(aws ssm get-command-invocation --command-id "$ID" --instance-id "$INSTANCE_ID" \
+              --query Status --output text 2>/dev/null || echo Pending)
+            case "$STATUS" in Pending|InProgress|Delayed) ;; *) break ;; esac
+          done
+
+          aws ssm get-command-invocation --command-id "$ID" --instance-id "$INSTANCE_ID" --query StandardOutputContent --output text
+          aws ssm get-command-invocation --command-id "$ID" --instance-id "$INSTANCE_ID" --query StandardErrorContent --output text >&2
+          echo "Status: $STATUS"
+          [ "$STATUS" = Success ]
+      - name: Site is healthy
+        run: |
+          for _ in $(seq 1 12); do
+            curl -fsS "$SITE_URL/api/health" && exit 0
+            sleep 5
+          done
+          echo "::error::$SITE_URL/api/health does not answer ok"
+          exit 1
