@@ -11,7 +11,10 @@ set -euo pipefail
 
 REGION=eu-central-1
 INSTANCE_ID=i-0af9c67b1566f5c8d
-REPO=Unicorn-University-Team/assetStore
+# GitHub puts the repository into the token's "sub" claim with its immutable ids (owner@id/repo@id),
+# so a renamed or re-created repository with the same name cannot use this role. Current value:
+#   gh api repos/Unicorn-University-Team/assetStore/actions/oidc/customization/sub
+REPO_SUBJECT=repo:Unicorn-University-Team@339749159/assetStore@1410671778
 SERVER_ROLE=assetstore-ec2
 DEPLOY_ROLE=assetstore-github-deploy
 
@@ -35,7 +38,7 @@ cat > /tmp/github-deploy-trust.json <<EOF
     "Condition": {
       "StringEquals": {
         "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-        "token.actions.githubusercontent.com:sub": "repo:$REPO:ref:refs/heads/main"
+        "token.actions.githubusercontent.com:sub": "$REPO_SUBJECT:ref:refs/heads/main"
       }
     }
   }]
