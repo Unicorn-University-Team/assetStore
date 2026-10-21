@@ -4,6 +4,10 @@ import { defineConfig } from 'vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  build: {
+    // Built JS/CSS go to /static, so /assets/... stays free for app pages (see README, routing rules).
+    assetsDir: 'static',
+  },
   server: {
     // In dev /api goes to the local backend, like Caddy does in production.
     // Override the target with API_PROXY_TARGET, e.g. when the backend runs on another port.
