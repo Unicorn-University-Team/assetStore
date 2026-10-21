@@ -79,3 +79,9 @@ code {
   justify-content: flex-end;
   white-space: nowrap;
 }
+
+.write-key {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 0.75rem;
+}

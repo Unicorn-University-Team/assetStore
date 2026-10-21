@@ -10,6 +10,7 @@ Web běží na **https://3-125-15-78.sslip.io** (dočasná adresa, dokud nemáme
 - [Lokální vývoj](#lokální-vývoj)
 - [Databáze a migrace](#databáze-a-migrace)
 - [Jak funguje nahrávání a stahování souborů](#jak-funguje-nahrávání-a-stahování-souborů)
+- [Ochrana zápisu](#ochrana-zápisu)
 - [Pravidla pro routy: frontend × backend](#pravidla-pro-routy-frontend--backend)
 - [API](#api)
 - [Nasazení](#nasazení)
@@ -100,6 +101,8 @@ V `backend/.env`:
 - `S3_BUCKET=assetstore-files-tym1-dev`: vývojový bucket, soubory z vývoje se tak nemíchají se soubory na webu.
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`: přístupový klíč k vývojovému bucketu, dá ho Yura.
   Klíč neposílat do skupinových chatů a nikdy necommitovat.
+
+`WRITE_KEY` nechat lokálně prázdný, pak je zápis otevřený (viz [Ochrana zápisu](#ochrana-zápisu)).
 
 Kontrola: `curl http://localhost:3000/api/health` vrátí `{"status":"ok","database":"ok","storage":"ok"}`.
 Když je `storage` `error`, chybí nebo nesedí `S3_BUCKET` nebo AWS klíče.
@@ -196,10 +199,12 @@ nepovede, chyba se zapíše do logu backendu a záznam zůstane smazaný.
 
 | Kód | Kdy |
 |---|---|
+| 401 | chybí nebo nesedí klíč pro zápis (`X-Write-Key`) |
 | 400 | chybí `name` nebo `file`, neplatný `type`, nepovolená přípona, požadavek není `multipart/form-data` |
 | 404 | asset neexistuje (i neplatné id) |
 | 413 | soubor je větší než `MAX_UPLOAD_MB` |
 | 502 | soubor se nepodařilo uložit do S3 |
+| 507 | všechny soubory dohromady by překročily `MAX_STORAGE_GB` |
 
 Chybová odpověď je vždy JSON `{ "error": "..." }`. Funkce ve `frontend/src/api/client.ts` z něj udělají `Error`
 s touto zprávou.
@@ -213,6 +218,8 @@ curl -OJ http://localhost:3000/api/assets/<id>/download     # uloží soubor pod
 curl -X DELETE http://localhost:3000/api/assets/<id>
 ```
 
+Lokálně bez `WRITE_KEY` klíč není potřeba; na serveru se přidá `-H 'X-Write-Key: <klíč>'`.
+
 ### Přístup k S3
 
 - **Server** nemá žádné klíče. AWS SDK si přihlášení vezme z IAM role `assetstore-ec2`, kterou má instance EC2.
@@ -222,9 +229,34 @@ curl -X DELETE http://localhost:3000/api/assets/<id>
 
 ### Co zatím chybí
 
-- Vlastník assetu (`owner_id`) a kontrola práv: přijde s přihlášením (AUTH-1 až AUTH-3). Zatím může nahrávat
-  a mazat každý.
+- Vlastník assetu (`owner_id`) a kontrola práv: přijde s přihlášením (AUTH-1 až AUTH-3). Do té doby zápis
+  chrání společný klíč, viz [Ochrana zápisu](#ochrana-zápisu).
 - Tagy, recenze, kolekce.
+
+## Ochrana zápisu
+
+Dokud nemáme registraci a přihlášení, nikdo cizí nesmí nahrávat, upravovat ani mazat assety. Proto platí dvě pojistky:
+
+1. **Klíč pro zápis.** `POST`, `PUT` a `DELETE` na `/api/assets` vyžadují hlavičku `X-Write-Key` se společným klíčem
+   týmu (`WRITE_KEY` v `.env` na serveru). Bez klíče nebo se špatným klíčem je odpověď **401** a soubor se ani
+   nezačne nahrávat. Prohlížení, hledání a stahování klíč nepotřebují. Když `WRITE_KEY` není nastavený (lokální
+   vývoj), je zápis otevřený.
+2. **Limit celkové velikosti** `MAX_STORAGE_GB` (výchozí 5 GB). Když by všechny soubory dohromady limit překročily,
+   nahrání skončí **507** a soubor se v S3 nenechá. I kdyby klíč unikl, bucket nejde zaplnit donekonečna.
+
+Klíč dá Yura, posílat ho jen soukromě. Na testovací stránce se zadává do pole „Write key“ a prohlížeč si ho
+pamatuje. Z kódu se posílá takto:
+
+```ts
+uploadAsset(asset, writeKey)    // frontend/src/api/assets.ts, přidá hlavičku X-Write-Key
+```
+
+```bash
+curl -H 'X-Write-Key: <klíč>' -F name='Meč' -F type=3d -F file=@sword.glb https://3-125-15-78.sslip.io/api/assets
+```
+
+Klíč je záměrně v hlavičce `X-Write-Key`, ne v `Authorization`: tu používá heslo na celý web (`SITE_AUTH`).
+Až bude přihlášení, nahradí klíč kontrola uživatele a jeho role.
 
 ## Pravidla pro routy: frontend × backend
 
@@ -257,9 +289,9 @@ a bez CORS.
 | `GET` | `/api/health` | stav: `{ status, database, storage }`, při chybě 503 |
 | `GET` | `/api/assets?search=&page=` | seznam, hledání v názvu bez ohledu na velikost písmen, 20 na stránku: `{ items, page, pageSize, total }` |
 | `GET` | `/api/assets/:id` | jeden asset |
-| `POST` | `/api/assets` | nahrání, `multipart/form-data`: `name`, `description`, `type`, `file` |
-| `PUT` | `/api/assets/:id` | JSON `{ name, description }`; soubor se nemění |
-| `DELETE` | `/api/assets/:id` | smaže záznam i soubor |
+| `POST` | `/api/assets` | nahrání, `multipart/form-data`: `name`, `description`, `type`, `file`; potřebuje `X-Write-Key` |
+| `PUT` | `/api/assets/:id` | JSON `{ name, description }`, soubor se nemění; potřebuje `X-Write-Key` |
+| `DELETE` | `/api/assets/:id` | smaže záznam i soubor; potřebuje `X-Write-Key` |
 | `GET` | `/api/assets/:id/download` | stažení souboru, `downloadCount` + 1 |
 
 Asset v odpovědi (`backend/src/views/asset.view.ts`):
@@ -300,6 +332,8 @@ Nastavení serveru je v `~/assetStore/.env`. Vzor je `.env.example`, samotný `.
 | `S3_BUCKET` | bucket se soubory assetů, na serveru `assetstore-files-tym1` |
 | `AWS_REGION` | region bucketu, `eu-central-1` |
 | `MAX_UPLOAD_MB` | největší povolená velikost nahrávaného souboru v MB, výchozí 100 |
+| `MAX_STORAGE_GB` | limit pro všechny soubory dohromady v GB, výchozí 5 |
+| `WRITE_KEY` | společný klíč týmu pro nahrávání, úpravy a mazání; prázdné = zápis otevřený |
 
 Nový server se poprvé připraví skriptem `deploy/setup-server.sh` (Docker, swap, naklonování repozitáře). Instance
 navíc potřebuje IAM roli s přístupem k bucketu.

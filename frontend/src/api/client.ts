@@ -13,13 +13,13 @@ export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> 
 }
 
 // multipart/form-data upload; the browser sets the Content-Type with the boundary itself.
-export async function apiPostForm<T>(path: string, form: FormData): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, { method: 'POST', body: form })
+export async function apiPostForm<T>(path: string, form: FormData, headers?: HeadersInit): Promise<T> {
+  const response = await fetch(`${API_URL}${path}`, { method: 'POST', body: form, headers })
   if (!response.ok) throw await readError(response, `POST ${path}`)
   return response.json() as Promise<T>
 }
 
-export async function apiDelete(path: string): Promise<void> {
-  const response = await fetch(`${API_URL}${path}`, { method: 'DELETE' })
+export async function apiDelete(path: string, headers?: HeadersInit): Promise<void> {
+  const response = await fetch(`${API_URL}${path}`, { method: 'DELETE', headers })
   if (!response.ok) throw await readError(response, `DELETE ${path}`)
 }
