@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { API_URL, apiGet } from './api/client'
 import './App.css'
+import AssetsDemo from './components/AssetsDemo'
 
-type Health = { status: string }
+type Health = { status: string; database?: string; storage?: string }
 
 type BackendState =
   | { kind: 'loading' }
@@ -46,6 +47,8 @@ function App() {
           GET <code>{API_URL}/health</code>
         </p>
       </section>
+
+      <AssetsDemo />
     </main>
   )
 }
