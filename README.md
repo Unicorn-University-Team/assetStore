@@ -13,6 +13,7 @@ Web běží na **https://3-125-15-78.sslip.io** (dočasná adresa, dokud nemáme
 - [Ochrana zápisu](#ochrana-zápisu)
 - [Pravidla pro routy: frontend × backend](#pravidla-pro-routy-frontend--backend)
 - [API](#api)
+- [CI](#ci)
 - [Nasazení](#nasazení)
 
 ## Co kde leží
@@ -309,6 +310,26 @@ Asset v odpovědi (`backend/src/views/asset.view.ts`):
   "updatedAt": "2026-10-21T21:38:54.677Z"
 }
 ```
+
+## CI
+
+Každý pull request a každý push do `main` zkontroluje GitHub Actions (`.github/workflows/ci.yml`). Výsledek je vidět
+v PR jako zelená nebo červená značka; pro veřejný repozitář je to zdarma.
+
+| Úloha | Co kontroluje |
+|---|---|
+| Backend | `npm ci`, platné schéma Prismy, migrace projdou na prázdné databázi, **schéma a migrace sedí**, `typecheck`, `build` |
+| Frontend | `npm ci`, `lint` (i varování jsou chyba), `build` |
+| Docker images | sestaví obraz backendu i frontendu stejně jako při nasazení |
+
+Když CI selže:
+
+- **„schema.prisma differs from the migrations“**: změnilo se `schema.prisma`, ale chybí migrace. Spustit
+  `npm run db:migrate -- --name <co-se-změnilo>` a složku z `prisma/migrations/` commitnout.
+- **Lint**: `npm run lint` ve `frontend/` ukáže totéž lokálně.
+- **Typecheck nebo build**: `npm run typecheck` / `npm run build` v příslušné složce.
+
+Lokálně stačí před pushnutím pustit stejné příkazy; detail chyby je v PR pod „Details“ u neúspěšné kontroly.
 
 ## Nasazení
 
