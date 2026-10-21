@@ -1,42 +1,64 @@
-import { randomUUID } from 'node:crypto';
+import { prisma } from '../db/prisma';
+import type { Asset } from '../generated/prisma/client';
 
-export interface Asset {
-  id: string;
-  name: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
+export type { Asset };
 
-export type AssetInput = Pick<Asset, 'name'>;
+export const ASSET_TYPES = ['2d', '3d', 'map', 'sound', 'environment'] as const;
+export type AssetType = (typeof ASSET_TYPES)[number];
 
-const assets = new Map<string, Asset>();
+// Upload whitelist (spec, non-functional requirements). Lower case, without the dot.
+export const ALLOWED_EXTENSIONS: ReadonlySet<string> = new Set([
+  // 2D
+  'png', 'jpg', 'jpeg', 'webp', 'gif', 'psd',
+  // 3D
+  'fbx', 'obj', 'mtl', 'gltf', 'glb', 'blend', 'stl', 'dae', '3ds',
+  // sound
+  'wav', 'mp3', 'ogg', 'flac',
+  // maps, environments, bundles
+  'zip', '7z', 'unitypackage', 'tmx',
+]);
+
+export type AssetInput = Pick<Asset, 'name' | 'description' | 'type' | 'fileKey' | 'fileName' | 'fileSize' | 'contentType'>;
+export type AssetUpdate = Pick<Asset, 'name' | 'description'>;
 
 export const AssetModel = {
-  findAll(): Asset[] {
-    return [...assets.values()];
+  async findPage(options: { search: string; page: number; pageSize: number }) {
+    const where = options.search ? { name: { contains: options.search, mode: 'insensitive' as const } } : {};
+    const [items, total] = await prisma.$transaction([
+      prisma.asset.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (options.page - 1) * options.pageSize,
+        take: options.pageSize,
+      }),
+      prisma.asset.count({ where }),
+    ]);
+    return { items, total };
   },
 
-  findById(id: string): Asset | undefined {
-    return assets.get(id);
+  findById(id: string): Promise<Asset | null> {
+    return prisma.asset.findUnique({ where: { id } });
   },
 
-  create(input: AssetInput): Asset {
-    const now = new Date();
-    const asset: Asset = { id: randomUUID(), name: input.name, createdAt: now, updatedAt: now };
-    assets.set(asset.id, asset);
+  create(input: AssetInput): Promise<Asset> {
+    return prisma.asset.create({ data: input });
+  },
+
+  async update(id: string, input: AssetUpdate): Promise<Asset | null> {
+    const result = await prisma.asset.updateMany({ where: { id }, data: input });
+    return result.count === 0 ? null : prisma.asset.findUnique({ where: { id } });
+  },
+
+  // Only the server changes downloadCount (spec, AST-4).
+  async incrementDownloads(id: string): Promise<void> {
+    await prisma.asset.update({ where: { id }, data: { downloadCount: { increment: 1 } } });
+  },
+
+  // Returns the deleted asset, so the caller can remove its file from S3.
+  async remove(id: string): Promise<Asset | null> {
+    const asset = await prisma.asset.findUnique({ where: { id } });
+    if (!asset) return null;
+    await prisma.asset.delete({ where: { id } });
     return asset;
-  },
-
-  update(id: string, input: AssetInput): Asset | undefined {
-    const asset = assets.get(id);
-    if (!asset) return undefined;
-
-    asset.name = input.name;
-    asset.updatedAt = new Date();
-    return asset;
-  },
-
-  remove(id: string): boolean {
-    return assets.delete(id);
   },
 };

@@ -47,3 +47,35 @@ body {
 code {
   word-break: break-all;
 }
+
+.upload {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.upload textarea,
+.upload input[type='file'] {
+  grid-column: 1 / -1;
+}
+
+.assets {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.assets th,
+.assets td {
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+}
+
+.assets .actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  white-space: nowrap;
+}

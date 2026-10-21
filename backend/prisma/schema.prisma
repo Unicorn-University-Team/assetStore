@@ -1,0 +1,30 @@
+// Database schema. After a change: `npm run db:migrate -- --name <what-changed>` creates a migration
+// in prisma/migrations and regenerates the client in src/generated/prisma.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Asset {
+  id            String   @id @default(uuid()) @db.Uuid
+  name          String   @db.VarChar(100)
+  description   String   @default("")
+  // 2d | 3d | map | sound | environment, checked in the controller
+  type          String   @db.VarChar(20)
+  // Generated S3 object key; the file is only served through GET /api/assets/:id/download
+  fileKey       String   @unique @map("file_key")
+  fileName      String   @map("file_name")
+  fileSize      Int      @map("file_size")
+  contentType   String   @map("content_type")
+  downloadCount Int      @default(0) @map("download_count")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("asset")
+}
