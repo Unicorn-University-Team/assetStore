@@ -1,0 +1,6 @@
+# SITE_ADDRESS ":80" serves plain HTTP on the server's IP.
+# A domain (e.g. 3-120-10-5.sslip.io) makes Caddy get an HTTPS certificate automatically.
+{$SITE_ADDRESS::80} {
+	encode gzip
+	reverse_proxy backend:3000
+}
