@@ -19,7 +19,8 @@ cd frontend && npm install && npm run dev    # web na http://localhost:5173 (dru
 ```
 
 Vite přeposílá požadavky na `/api` na backend (`frontend/vite.config.ts`), stejně jako to dělá Caddy na serveru.
-Když backend běží na jiném portu: `API_PROXY_TARGET=http://localhost:3001 npm run dev`.
+Když backend běží na jiném portu (třeba protože 3000 je obsazený), stačí v `backend/.env` nastavit `PORT=3001`
+a ve `frontend/.env.local` řádek `API_PROXY_TARGET=http://localhost:3001`. Soubory `.env` do gitu nepatří.
 
 PostgreSQL lokálně: `cp .env.example .env`, vyplnit `POSTGRES_PASSWORD` a spustit `docker compose up -d db`
 (databáze poběží na `localhost:5432`). Backend ji zatím nepoužívá.
