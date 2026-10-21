@@ -1,0 +1,49 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+body {
+  margin: 0;
+}
+
+.page {
+  max-width: 40rem;
+  margin: 4rem auto;
+  padding: 0 1rem;
+}
+
+.card {
+  margin-top: 2rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: 8px;
+}
+
+.card h2 {
+  margin-top: 0;
+  font-size: 1.1rem;
+}
+
+.muted {
+  opacity: 0.7;
+}
+
+.small {
+  font-size: 0.85rem;
+}
+
+.ok {
+  color: #1a7f37;
+  font-weight: 600;
+}
+
+.error {
+  color: #cf222e;
+  font-weight: 600;
+}
+
+code {
+  word-break: break-all;
+}

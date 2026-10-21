@@ -2,5 +2,18 @@
 # A domain (e.g. 3-120-10-5.sslip.io) makes Caddy get an HTTPS certificate automatically.
 {$SITE_ADDRESS::80} {
 	encode gzip
-	reverse_proxy backend:3000
+
+	# SITE_AUTH=on puts the whole site (frontend and API) behind a login, see deploy/caddy-auth/.
+	import auth/{$SITE_AUTH:off}.caddy
+
+	handle /api/* {
+		reverse_proxy backend:3000
+	}
+
+	# Frontend build (copied to /srv by frontend/Dockerfile); unknown paths fall back to the SPA.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
 }

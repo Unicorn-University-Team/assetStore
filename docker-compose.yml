@@ -1,4 +1,4 @@
-# Whole stack on one machine: PostgreSQL, the backend and Caddy in front of it.
+# Whole stack on one machine: PostgreSQL, the backend, and Caddy serving the frontend in front of it.
 # Server: docker compose up -d --build
 # Local Postgres only: docker compose up -d db
 services:
@@ -35,16 +35,21 @@ services:
       timeout: 3s
       retries: 5
 
+  # Caddy with the built frontend inside (frontend/Dockerfile): serves the site, /api goes to the backend.
   caddy:
-    image: caddy:2-alpine
+    build: ./frontend
     restart: unless-stopped
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+      SITE_AUTH: ${SITE_AUTH:-off}
+      SITE_AUTH_USER: ${SITE_AUTH_USER:-}
+      SITE_AUTH_HASH: ${SITE_AUTH_HASH:-}
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./deploy/caddy-auth:/etc/caddy/auth:ro
       - caddy-data:/data
       - caddy-config:/config
     depends_on:

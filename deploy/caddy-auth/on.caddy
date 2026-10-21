@@ -1,0 +1,5 @@
+# One shared login for the whole site until the app has real authentication.
+# SITE_AUTH_HASH is a bcrypt hash: docker run --rm caddy:2-alpine caddy hash-password --plaintext 'password'
+basic_auth {
+	{$SITE_AUTH_USER} {$SITE_AUTH_HASH}
+}
