@@ -24,4 +24,14 @@ fi
 # Old images and build cache would slowly fill the server's disk.
 docker image prune -f >/dev/null
 docker builder prune -f --filter until=168h >/dev/null
+
+# Disk more than 70% full: drop the whole build cache and all unused images too.
+# Nothing is lost, the next build only takes longer.
+used=$(df --output=pcent / | tail -1 | tr -dc '0-9')
+if [ "$used" -gt 70 ]; then
+  echo "Disk ${used}% full, removing all build cache and unused images"
+  docker builder prune -af >/dev/null
+  docker image prune -af >/dev/null
+fi
+df -h / | tail -1
 echo "Done"
