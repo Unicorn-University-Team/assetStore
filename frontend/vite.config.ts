@@ -6,6 +6,13 @@ export default defineConfig(({ mode }) => {
   // Prefix '' reads all variables, not only VITE_*, from the environment and frontend/.env*.local files.
   const env = loadEnv(mode, process.cwd(), '')
 
+  // Backend services in local development (`npm run dev` in services/<name>).
+  // Another port: IDENTITY_URL, CATALOG_URL or COMMUNITY_URL in frontend/.env.local.
+  const identity = env.IDENTITY_URL || 'http://localhost:3001'
+  const catalog = env.CATALOG_URL || 'http://localhost:3002'
+  const community = env.COMMUNITY_URL || 'http://localhost:3003'
+  const health = (target: string) => ({ target, rewrite: () => '/health' })
+
   return {
     plugins: [react()],
     build: {
@@ -13,10 +20,16 @@ export default defineConfig(({ mode }) => {
       assetsDir: 'static',
     },
     server: {
-      // In dev /api goes to the local backend, like Caddy does in production.
-      // When the backend runs on another port, set API_PROXY_TARGET in frontend/.env.local.
+      // The same split of /api as deploy/Caddyfile does in production; keep both in sync.
+      // The first matching entry wins.
       proxy: {
-        '/api': env.API_PROXY_TARGET || 'http://localhost:3000',
+        '/api/health/identity': health(identity),
+        '/api/health/catalog': health(catalog),
+        '/api/health/community': health(community),
+        '^/api/(auth|users)(/|$)': identity,
+        '^/api/assets/[^/]+/(reviews|reports)(/|$)': community,
+        '^/api/(reviews|collections|reports)(/|$)': community,
+        '^/api/(assets|tags)(/|$)': catalog,
       },
     },
   }

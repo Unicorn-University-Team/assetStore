@@ -1,0 +1,19 @@
+{
+  "name": "@assetstore/shared",
+  "version": "1.0.0",
+  "description": "Code shared by all backend services",
+  "private": true,
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^24.0.0",
+    "typescript": "^7.0.2"
+  }
+}

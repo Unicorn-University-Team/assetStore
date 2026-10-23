@@ -1,0 +1,13 @@
+// Database schema of the community service (its own database: community). No models yet.
+// After a change: `npm run db:migrate -- --name <what-changed>` creates a migration in prisma/migrations
+// and regenerates the client in src/generated/prisma.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}

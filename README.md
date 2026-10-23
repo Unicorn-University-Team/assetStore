@@ -6,6 +6,7 @@ zvuky, prostředí). Uživatelé assety nahrávají, hledají a stahují.
 Web běží na **https://3-125-15-78.sslip.io** (dočasná adresa, dokud nemáme vlastní doménu).
 
 - [Co kde leží](#co-kde-leží)
+- [Architektura: mikroslužby](#architektura-mikroslužby)
 - [Nástroje, které používáme](#nástroje-které-používáme)
 - [Lokální vývoj](#lokální-vývoj)
 - [Databáze a migrace](#databáze-a-migrace)
@@ -19,24 +20,65 @@ Web běží na **https://3-125-15-78.sslip.io** (dočasná adresa, dokud nemáme
 ## Co kde leží
 
 ```
-backend/
-├── prisma/schema.prisma          schéma databáze
-├── prisma/migrations/            migrace (SQL), patří do gitu
-└── src/
-    ├── config/env.ts             nastavení z proměnných prostředí
-    ├── db/prisma.ts              připojení k PostgreSQL
-    ├── storage/file-storage.ts   práce se soubory v S3
-    ├── utils/receiveUpload.ts    příjem nahrávaného souboru
-    ├── models/ controllers/ views/ routes/   MVC: data, logika, odpovědi, URL
-    └── generated/prisma/         vygenerovaný klient Prismy (není v gitu)
+services/                         backend: tři mikroslužby (npm workspaces)
+├── identity/                     uživatelé, přihlášení, role
+├── catalog/                      assety, tagy, soubory v S3
+├── community/                    recenze, kolekce, reporty
+└── Dockerfile                    jeden Dockerfile pro všechny služby
+    každá služba:
+    ├── prisma/schema.prisma      schéma její databáze
+    ├── prisma/migrations/        migrace (SQL), patří do gitu
+    └── src/
+        ├── app.ts, server.ts     Express aplikace a její spuštění
+        ├── config/env.ts         nastavení z proměnných prostředí
+        ├── db/prisma.ts          připojení k vlastní databázi
+        ├── models/ controllers/ views/ routes/   MVC: data, logika, odpovědi, URL
+        └── generated/prisma/     vygenerovaný klient Prismy (není v gitu)
+packages/shared/                  kód společný pro všechny služby (HttpError, obsluha chyb…)
 frontend/
 └── src/
     ├── api/client.ts             fetch na /api
     ├── api/assets.ts             assety: seznam, nahrání, smazání, odkaz ke stažení
     └── components/               komponenty (AssetsDemo.tsx = testovací stránka)
-deploy/                           konfigurace Caddy a skript pro první nastavení serveru
-docker-compose.yml                celý stack: PostgreSQL, backend, Caddy s frontendem
+deploy/                           Caddy (API gateway), skripty pro server a AWS, vytvoření databází
+docker-compose.yml                celý stack: PostgreSQL, tři služby, Caddy s frontendem
+package.json                      kořen npm workspaces pro backend (frontend má vlastní)
 ```
+
+## Architektura: mikroslužby
+
+Backend jsou tři samostatné služby. Každá má **vlastní databázi** a do cizí databáze nikdy nesahá.
+
+| Služba | Data | Požadavky (spec) | Veřejné cesty | Lokální port |
+|---|---|---|---|---|
+| **identity** | uživatelé, refresh tokeny | AUTH-1…3, ADM-1, ADM-2 | `/api/auth/*`, `/api/users/*` | 3001 |
+| **catalog** | assety, tagy, soubory v S3 | AST-1…7, TAG-1…2 | `/api/assets/*`, `/api/tags/*` | 3002 |
+| **community** | recenze, kolekce, reporty | REV-1…3, COL-1…2, REP-1…3 | `/api/assets/:id/reviews`, `/api/assets/:id/reports`, `/api/reviews/*`, `/api/collections/*`, `/api/reports/*` | 3003 |
+
+```
+prohlížeč ──▶ Caddy (API gateway, HTTPS)
+               ├── /api/auth, /api/users                     ──▶ identity  ──▶ databáze identity
+               ├── /api/assets/:id/reviews|reports,
+               │   /api/reviews, /api/collections, /api/reports ──▶ community ──▶ databáze community
+               ├── /api/assets, /api/tags                     ──▶ catalog   ──▶ databáze catalog + S3
+               └── všechno ostatní                             ──▶ frontend
+```
+
+- **Caddy je API gateway.** Pro frontend existuje jen jedna adresa `/api`; Caddy podle cesty pošle požadavek
+  správné službě (`deploy/Caddyfile`). Ve vývoji dělá totéž Vite (`frontend/vite.config.ts`), obě místa se musí
+  měnit spolu. Neznámá cesta pod `/api` vrátí JSON 404.
+- **Databáze:** jeden PostgreSQL, v něm databáze `identity`, `catalog` a `community`. Vytvoří je služba `db-init`
+  v `docker-compose.yml`. Mezi službami nejsou cizí klíče: `ownerId`, `userId`, `assetId` jsou jen UUID.
+- **Zdraví služeb:** každá služba má `GET /health` (kontroluje svou databázi, catalog i S3). Zvenku je to
+  `/api/health/identity`, `/api/health/catalog`, `/api/health/community`.
+- **Přihlášení (přijde v PR identity):** krátký JWT a refresh token v httpOnly cookie. Token podepisuje identity,
+  ostatní služby ho ověřují samy veřejným klíčem.
+- **Komunikace mezi službami (přijde s funkcemi):** přímé HTTP volání uvnitř sítě Dockeru na `/internal/...`,
+  které Caddy ven nepouští. Například smazání assetu v catalog → community smaže jeho recenze a reporty.
+- **Společný kód** je v `packages/shared` (`import { HttpError } from '@assetstore/shared'`). Po změně:
+  `npm run build -w @assetstore/shared`.
+
+Nová cesta pod `/api` = přidat ji do `deploy/Caddyfile` i do `frontend/vite.config.ts` k té službě, která ji vlastní.
 
 ## Nástroje, které používáme
 
@@ -45,13 +87,14 @@ docker-compose.yml                celý stack: PostgreSQL, backend, Caddy s fron
 | Nástroj | K čemu ho máme |
 |---|---|
 | **Node.js 24** | běhové prostředí pro backend |
-| **Express 5** | HTTP server a routy, struktura MVC |
+| **Express 5** | HTTP server a routy v každé službě, struktura MVC |
+| **npm workspaces** | jeden `npm install` v kořeni pro všechny služby a `packages/shared` |
 | **TypeScript** | typy v celém projektu; `npm run typecheck` |
 | **Prisma 7** | práce s databází: schéma, migrace, typovaný klient (`prisma.asset.findMany()`…) |
 | **PostgreSQL 17** | databáze; lokálně i na serveru běží v Dockeru |
 | **AWS SDK v3** (`@aws-sdk/client-s3`, `@aws-sdk/lib-storage`) | ukládání, čtení a mazání souborů v S3 |
 | **busboy** | čtení `multipart/form-data`, tedy formuláře se souborem, bez ukládání na disk |
-| **dotenv** | načte `backend/.env` do `process.env` |
+| **dotenv** | načte `services/<služba>/.env` do `process.env` |
 | **tsx** | spouští TypeScript ve vývoji a restartuje server při změně (`npm run dev`) |
 
 ### Frontend
@@ -59,7 +102,7 @@ docker-compose.yml                celý stack: PostgreSQL, backend, Caddy s fron
 | Nástroj | K čemu ho máme |
 |---|---|
 | **React 19** | uživatelské rozhraní |
-| **Vite 8** | vývojový server a sestavení; ve vývoji přeposílá `/api` na backend |
+| **Vite 8** | vývojový server a sestavení; ve vývoji posílá `/api` na správnou službu |
 | **TypeScript** | typy; přísné nastavení (viz PR #2) |
 | **oxlint** | linter; `npm run lint` |
 
@@ -67,8 +110,8 @@ docker-compose.yml                celý stack: PostgreSQL, backend, Caddy s fron
 
 | Nástroj | K čemu ho máme |
 |---|---|
-| **Docker + Docker Compose** | celý stack v kontejnerech: `db`, `backend`, `caddy` |
-| **Caddy 2** | jediný vstup zvenku: HTTPS certifikát (Let's Encrypt, sám), frontend, `/api` → backend |
+| **Docker + Docker Compose** | celý stack v kontejnerech: `db`, `db-init`, `identity`, `catalog`, `community`, `caddy` |
+| **Caddy 2** | jediný vstup zvenku a API gateway: HTTPS certifikát (Let's Encrypt, sám), frontend, `/api` → služby |
 | **AWS EC2** | server: `t4g.micro` (ARM, 1 GB RAM), Ubuntu 24.04, region Frankfurt |
 | **AWS S3** | úložiště souborů assetů: bucket `assetstore-files-tym1` (web) a `assetstore-files-tym1-dev` (vývoj) |
 | **AWS IAM** | přístupová práva: role `assetstore-ec2` pro server, user `assetstore-dev` pro vývoj |
@@ -77,68 +120,82 @@ docker-compose.yml                celý stack: PostgreSQL, backend, Caddy s fron
 
 ## Lokální vývoj
 
-Potřeba: Node.js 24, Docker.
+Potřeba: Node.js 24, Docker. Všechno se spouští z kořene repozitáře, pokud není řečeno jinak.
 
-**1. Databáze** (v kořeni repozitáře):
+**1. Databáze:**
 
 ```bash
-cp .env.example .env          # vyplnit POSTGRES_PASSWORD, jen písmena a číslice
-docker compose up -d db       # PostgreSQL na localhost:5432
+cp .env.example .env              # vyplnit POSTGRES_PASSWORD, jen písmena a číslice
+docker compose up -d db-init      # PostgreSQL na localhost:5432 + databáze identity, catalog, community
 ```
 
 **2. Backend:**
 
 ```bash
-cd backend
-cp .env.example .env          # vyplnit DATABASE_URL, S3_BUCKET a AWS klíče (níže)
-npm install                   # nainstaluje balíčky a vygeneruje klienta Prismy
-npm run db:deploy             # vytvoří tabulky v lokální databázi
-npm run dev                   # API na http://localhost:3000
+npm install                       # všechny služby; sestaví packages/shared a vygeneruje klienty Prismy
+for s in identity catalog community; do cp services/$s/.env.example services/$s/.env; done
+# v každém .env doplnit heslo do DATABASE_URL, v services/catalog/.env navíc S3 (níže)
+npm run db:deploy --workspaces --if-present    # vytvoří tabulky ve všech třech databázích
 ```
 
-V `backend/.env`:
+Každá služba se pouští ve vlastním terminálu (nebo jen ta, na které se pracuje):
 
-- `DATABASE_URL=postgres://assetstore:<POSTGRES_PASSWORD>@localhost:5432/assetstore`
+```bash
+cd services/identity && npm run dev     # http://localhost:3001
+cd services/catalog && npm run dev      # http://localhost:3002
+cd services/community && npm run dev    # http://localhost:3003
+```
+
+V `services/catalog/.env` navíc:
+
 - `S3_BUCKET=assetstore-files-tym1-dev`: vývojový bucket, soubory z vývoje se tak nemíchají se soubory na webu.
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`: přístupový klíč k vývojovému bucketu, dá ho Yura.
   Klíč neposílat do skupinových chatů a nikdy necommitovat.
+- `WRITE_KEY` nechat lokálně prázdný, pak je zápis otevřený (viz [Ochrana zápisu](#ochrana-zápisu)).
 
-`WRITE_KEY` nechat lokálně prázdný, pak je zápis otevřený (viz [Ochrana zápisu](#ochrana-zápisu)).
-
-Kontrola: `curl http://localhost:3000/api/health` vrátí `{"status":"ok","database":"ok","storage":"ok"}`.
+Kontrola: `curl http://localhost:3002/health` vrátí `{"service":"catalog","status":"ok","database":"ok","storage":"ok"}`.
 Když je `storage` `error`, chybí nebo nesedí `S3_BUCKET` nebo AWS klíče.
 
-**3. Frontend** (v druhém terminálu):
+**3. Frontend** (v dalším terminálu):
 
 ```bash
 cd frontend && npm install && npm run dev    # web na http://localhost:5173
 ```
 
-Vite přeposílá požadavky na `/api` na backend (`frontend/vite.config.ts`), stejně jako to dělá Caddy na serveru.
-Když je port 3000 obsazený: v `backend/.env` nastavit `PORT=3001` a do `frontend/.env.local` napsat
-`API_PROXY_TARGET=http://localhost:3001`.
+Vite posílá `/api` na správnou službu podle stejných pravidel jako Caddy na serveru (`frontend/vite.config.ts`).
+Když služba běží na jiném portu, stačí do `frontend/.env.local` napsat třeba `CATALOG_URL=http://localhost:4002`
+(také `IDENTITY_URL`, `COMMUNITY_URL`).
+
+Celý stack jako na serveru: `docker compose up -d --build` → http://localhost.
 
 Soubory `.env` a `.env.local` do gitu nepatří, jsou v `.gitignore`.
 
 ## Databáze a migrace
 
-Schéma je v `backend/prisma/schema.prisma`. Postup při změně, třeba nové tabulce:
+Každá služba má vlastní schéma `services/<služba>/prisma/schema.prisma` a vlastní migrace. Za schéma služby odpovídá
+ten, kdo službu vede. Postup při změně, třeba nové tabulce v catalog:
 
-1. Upravit `schema.prisma`.
-2. `npm run db:migrate -- --name add-tags`: Prisma vytvoří SQL migraci v `prisma/migrations/`, použije ji
-   na lokální databázi a znovu vygeneruje klienta.
-3. Složku s migrací commitnout spolu se změnou schématu.
+1. Upravit `services/catalog/prisma/schema.prisma`.
+2. V `services/catalog`: `npm run db:migrate -- --name add-tags`. Prisma vytvoří SQL migraci v `prisma/migrations/`,
+   použije ji na lokální databázi a znovu vygeneruje klienta.
+3. Složku s migrací commitnout ve stejném PR jako změnu schématu.
 
-Na serveru se migrace použijí samy: kontejner backendu při startu spustí `prisma migrate deploy`.
+Pravidla:
 
-| Příkaz | Co dělá |
+- Už nasazené migrace se nikdy neupravují, jen se přidává nová.
+- Změnu schématu napsat dopředu do chatu, ať dva lidi nemění stejnou tabulku.
+- PR s migrací před mergem aktualizovat z `main`; CI ověří, že schéma a migrace sedí.
+
+Na serveru se migrace použijí samy: kontejner každé služby při startu spustí `prisma migrate deploy`.
+
+| Příkaz (ve složce služby) | Co dělá |
 |---|---|
 | `npm run db:migrate -- --name <název>` | nová migrace po změně schématu (jen lokálně) |
 | `npm run db:deploy` | použije všechny migrace, které v databázi ještě nejsou |
 | `npm run db:studio` | prohlížeč databáze v prohlížeči |
 
-Klienta Prismy importovat jen přes `src/db/prisma.ts` (`import { prisma } from '../db/prisma'`). Každý
-`new PrismaClient()` otevírá vlastní sadu spojení k databázi.
+Klienta Prismy importovat jen přes `src/db/prisma.ts` dané služby (`import { prisma } from '../db/prisma'`).
+Každý `new PrismaClient()` otevírá vlastní sadu spojení k databázi.
 
 ## Jak funguje nahrávání a stahování souborů
 
@@ -158,16 +215,16 @@ počítadlo stažení (spec, AST-4) a backend může kontrolovat práva.
 ### Nahrání: `POST /api/assets`
 
 ```
-prohlížeč ──multipart──▶ Caddy ──▶ Express ──▶ busboy ──stream──▶ S3 (assets/<uuid>)
+prohlížeč ──multipart──▶ Caddy ──▶ catalog ──▶ busboy ──stream──▶ S3 (assets/<uuid>)
                                                   │
                                                   └── po uložení souboru ──▶ PostgreSQL (záznam asset)
 ```
 
 1. **Frontend** pošle `multipart/form-data`: pole `name`, `description`, `type` a soubor `file`. Textová pole jdou
    první, soubor poslední (`uploadAsset()` ve `frontend/src/api/assets.ts`).
-2. **Caddy** požadavek jen přepošle backendu, nic neukládá.
-3. **`receiveUpload()`** (`backend/src/utils/receiveUpload.ts`) čte požadavek přes busboy:
-   - zkontroluje příponu podle whitelistu `ALLOWED_EXTENSIONS` (`backend/src/models/asset.model.ts`); nepovolená
+2. **Caddy** požadavek jen přepošle službě catalog, nic neukládá.
+3. **`receiveUpload()`** (`services/catalog/src/utils/receiveUpload.ts`) čte požadavek přes busboy:
+   - zkontroluje příponu podle whitelistu `ALLOWED_EXTENSIONS` (`services/catalog/src/models/asset.model.ts`); nepovolená
      přípona → **400**, nic se neukládá;
    - vygeneruje klíč `assets/<uuid>`;
    - soubor **streamuje rovnou do S3**. Velký soubor jde po částech po 5 MB (S3 multipart upload) a v paměti jsou
@@ -194,7 +251,7 @@ Ve frontendu stačí obyčejný odkaz: `<a href={downloadUrl(asset.id)}>Stáhnou
 ### Smazání: `DELETE /api/assets/:id`
 
 Nejdřív se smaže záznam v databázi, takže asset hned zmizí z katalogu, potom soubor v S3. Když se smazání v S3
-nepovede, chyba se zapíše do logu backendu a záznam zůstane smazaný.
+nepovede, chyba se zapíše do logu služby catalog a záznam zůstane smazaný.
 
 ### Chyby
 
@@ -213,10 +270,10 @@ s touto zprávou.
 ### Vyzkoušení přes curl
 
 ```bash
-curl -F name='Meč' -F type=3d -F description='Low poly' -F file=@sword.glb http://localhost:3000/api/assets
-curl 'http://localhost:3000/api/assets?search=meč'
-curl -OJ http://localhost:3000/api/assets/<id>/download     # uloží soubor pod původním jménem
-curl -X DELETE http://localhost:3000/api/assets/<id>
+curl -F name='Meč' -F type=3d -F description='Low poly' -F file=@sword.glb http://localhost:3002/api/assets
+curl 'http://localhost:3002/api/assets?search=meč'
+curl -OJ http://localhost:3002/api/assets/<id>/download     # uloží soubor pod původním jménem
+curl -X DELETE http://localhost:3002/api/assets/<id>
 ```
 
 Lokálně bez `WRITE_KEY` klíč není potřeba; na serveru se přidá `-H 'X-Write-Key: <klíč>'`.
@@ -225,7 +282,7 @@ Lokálně bez `WRITE_KEY` klíč není potřeba; na serveru se přidá `-H 'X-Wr
 
 - **Server** nemá žádné klíče. AWS SDK si přihlášení vezme z IAM role `assetstore-ec2`, kterou má instance EC2.
   Role smí jen číst, zapisovat a mazat soubory v bucketu `assetstore-files-tym1`.
-- **Vývoj** používá IAM usera `assetstore-dev` s klíčem v `backend/.env`. Smí jen do bucketu
+- **Vývoj** používá IAM usera `assetstore-dev` s klíčem v `services/catalog/.env`. Smí jen do bucketu
   `assetstore-files-tym1-dev`, k souborům na webu se nedostane.
 
 ### Co zatím chybí
@@ -265,14 +322,14 @@ Frontend i backend běží na jedné adrese. Caddy dělí požadavky podle cesty
 
 | Cesta | Kam jde |
 |---|---|
-| `/api/...` | backend, odpovídá JSONem |
+| `/api/...` | služba, která cestu vlastní (viz [Architektura](#architektura-mikroslužby)), odpovídá JSONem |
 | `/static/...` | soubory sestavení frontendu (JS, CSS) |
 | všechno ostatní | `index.html`, stránku vykreslí React Router |
 
 Přechody uvnitř aplikace přes React Router (`<Link>`, `navigate`) na server vůbec nejdou. Na server jde jen první
 načtení, obnovení stránky a požadavky `fetch` na `/api`.
 
-1. **`/api` patří jen backendu.** Všechny routy Express jsou pod `/api/...` a žádná stránka frontendu nezačíná na `/api`.
+1. **`/api` patří jen backendu.** Všechny veřejné routy služeb jsou pod `/api/...` a žádná stránka frontendu nezačíná na `/api`.
    Jinak by po obnovení stránky šel požadavek na backend a vrátil JSON 404.
 2. **`/static` patří jen sestavení frontendu.** Vite tam ukládá JS a CSS (`build.assetsDir` ve `vite.config.ts`).
    Stránky frontendu na `/static` nedávat. Cesty jako `/assets/:id` jsou pro stránky volné.
@@ -285,9 +342,11 @@ a bez CORS.
 
 ## API
 
+Zatím má endpointy jen **catalog**; identity a community jsou připravené prázdné služby.
+
 | Metoda | Cesta | Co dělá |
 |---|---|---|
-| `GET` | `/api/health` | stav: `{ status, database, storage }`, při chybě 503 |
+| `GET` | `/api/health/<služba>` | stav služby `identity`, `catalog` nebo `community`: `{ service, status, database }` (catalog i `storage`), při chybě 503 |
 | `GET` | `/api/assets?search=&page=` | seznam, hledání v názvu bez ohledu na velikost písmen, 20 na stránku: `{ items, page, pageSize, total }` |
 | `GET` | `/api/assets/:id` | jeden asset |
 | `POST` | `/api/assets` | nahrání, `multipart/form-data`: `name`, `description`, `type`, `file`; potřebuje `X-Write-Key` |
@@ -295,7 +354,7 @@ a bez CORS.
 | `DELETE` | `/api/assets/:id` | smaže záznam i soubor; potřebuje `X-Write-Key` |
 | `GET` | `/api/assets/:id/download` | stažení souboru, `downloadCount` + 1 |
 
-Asset v odpovědi (`backend/src/views/asset.view.ts`):
+Asset v odpovědi (`services/catalog/src/views/asset.view.ts`):
 
 ```json
 {
@@ -318,9 +377,10 @@ v PR jako zelená nebo červená značka; pro veřejný repozitář je to zdarma
 
 | Úloha | Co kontroluje |
 |---|---|
-| Backend | `npm ci`, platné schéma Prismy, migrace projdou na prázdné databázi, **schéma a migrace sedí**, `typecheck`, `build` |
+| Service (identity / catalog / community) | pro každou službu zvlášť: `npm ci`, platné schéma Prismy, migrace projdou na prázdné databázi, **schéma a migrace sedí**, `typecheck`, `build` |
+| Backend | souhrn: zelený, jen když prošly všechny tři služby (tuhle kontrolu vyžaduje pravidlo pro `main`) |
 | Frontend | `npm ci`, `lint` (i varování jsou chyba), `build` |
-| Docker images | sestaví obraz backendu i frontendu stejně jako při nasazení |
+| Docker images | sestaví obrazy všech tří služeb i frontendu stejně jako při nasazení |
 | Deploy | jen po mergi do `main` a jen když jsou všechny kontroly výše zelené: nasadí na server (viz [Nasazení](#nasazení)) |
 
 Když CI selže:
@@ -328,7 +388,7 @@ Když CI selže:
 - **„schema.prisma differs from the migrations“**: změnilo se `schema.prisma`, ale chybí migrace. Spustit
   `npm run db:migrate -- --name <co-se-změnilo>` a složku z `prisma/migrations/` commitnout.
 - **Lint**: `npm run lint` ve `frontend/` ukáže totéž lokálně.
-- **Typecheck nebo build**: `npm run typecheck` / `npm run build` v příslušné složce.
+- **Typecheck nebo build**: `npm run typecheck` / `npm run build` v příslušné složce (nebo v kořeni pro všechny služby).
 
 Lokálně stačí před pushnutím pustit stejné příkazy; detail chyby je v PR pod „Details“ u neúspěšné kontroly.
 
@@ -343,9 +403,9 @@ aktualizuje server:
    `assetstore-github-deploy` může použít jen větev `main` tohoto repozitáře.
 2. Přes AWS SSM pošle serveru příkaz: posunout `main` přesně na otestovaný commit a spustit `deploy/deploy.sh`.
    Port SSH zůstává zavřený.
-3. `deploy/deploy.sh` sestaví a restartuje kontejnery, počká, až je backend zdravý, a smaže staré obrazy, aby se
-   nezaplnil disk. Backend při startu sám použije nové migrace databáze.
-4. Úloha nakonec ověří `https://3-125-15-78.sslip.io/api/health`.
+3. `deploy/deploy.sh` sestaví a restartuje kontejnery, počká, až jsou všechny tři služby zdravé, a smaže staré
+   obrazy, aby se nezaplnil disk. Každá služba při startu sama použije nové migrace své databáze.
+4. Úloha nakonec ověří `https://3-125-15-78.sslip.io/api/health/<služba>` pro všechny tři služby.
 
 Průběh a výsledek je vidět v záložce **Actions**, u commitu v `main` je zelená nebo červená značka. Nasazení jdou
 jedno po druhém, nikdy dvě najednou.
