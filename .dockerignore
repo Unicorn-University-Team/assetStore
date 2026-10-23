@@ -1,0 +1,12 @@
+# Build context of the backend services is the repository root (services/Dockerfile).
+# The frontend image builds from frontend/ with its own .dockerignore.
+**/node_modules
+**/dist
+**/src/generated
+**/.env
+**/*.log
+.git
+.github
+spec
+frontend
+deploy

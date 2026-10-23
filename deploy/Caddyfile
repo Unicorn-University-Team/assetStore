@@ -1,13 +1,58 @@
 # SITE_ADDRESS ":80" serves plain HTTP on the server's IP.
 # A domain (e.g. 3-120-10-5.sslip.io) makes Caddy get an HTTPS certificate automatically.
+#
+# Caddy is the API gateway: it sends every /api request to the service that owns it.
+# Keep the routes in sync with frontend/vite.config.ts (the same split for local development).
 {$SITE_ADDRESS::80} {
 	encode gzip
 
 	# SITE_AUTH=on puts the whole site (frontend and API) behind a login, see deploy/caddy-auth/.
 	import auth/{$SITE_AUTH:off}.caddy
 
-	handle /api/* {
-		reverse_proxy backend:3000
+	# Health of each service: /api/health/<service> -> GET /health of that service
+	handle /api/health/identity {
+		rewrite * /health
+		reverse_proxy identity:3000
+	}
+	handle /api/health/catalog {
+		rewrite * /health
+		reverse_proxy catalog:3000
+	}
+	handle /api/health/community {
+		rewrite * /health
+		reverse_proxy community:3000
+	}
+
+	# identity: accounts, login, roles
+	@identity path /api/auth /api/auth/* /api/users /api/users/*
+	handle @identity {
+		reverse_proxy identity:3000
+	}
+
+	# community: reviews, collections, reports (also the ones under an asset: /api/assets/<id>/reviews|reports)
+	@community {
+		path /api/reviews /api/reviews/* /api/collections /api/collections/* /api/reports /api/reports/*
+	}
+	@communityOnAsset path_regexp ^/api/assets/[^/]+/(reviews|reports)(/.*)?$
+	handle @communityOnAsset {
+		reverse_proxy community:3000
+	}
+	handle @community {
+		reverse_proxy community:3000
+	}
+
+	# catalog: assets, tags, files
+	@catalog path /api/assets /api/assets/* /api/tags /api/tags/*
+	handle @catalog {
+		reverse_proxy catalog:3000
+	}
+
+	# Any other /api path: JSON 404, never the frontend page. A named matcher on purpose: named matchers
+	# keep the order written here, so this one is tried after the services above.
+	@unknownApi path /api /api/*
+	handle @unknownApi {
+		header Content-Type application/json
+		respond `{"error":"Route {method} {uri} not found"}` 404
 	}
 
 	# Frontend build (copied to /srv by frontend/Dockerfile); unknown paths fall back to the SPA.

@@ -1,0 +1,17 @@
+{
+  "name": "assetstore",
+  "version": "1.0.0",
+  "description": "Asset Store backend: services and the code they share (npm workspaces). The frontend has its own package.json.",
+  "private": true,
+  "workspaces": [
+    "packages/shared",
+    "services/identity",
+    "services/catalog",
+    "services/community"
+  ],
+  "scripts": {
+    "postinstall": "npm run build -w @assetstore/shared && npm run db:generate --workspaces --if-present",
+    "build": "npm run build --workspaces",
+    "typecheck": "npm run typecheck --workspaces"
+  }
+}
