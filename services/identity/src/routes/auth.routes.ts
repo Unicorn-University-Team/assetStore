@@ -2,6 +2,8 @@ import { Router } from "express";
 import { prisma } from "../db/prisma";
 import * as argon2 from "argon2";
 import { Prisma } from "../generated/prisma/client";
+import { signAccessToken } from "../auth/jwt";
+import { requireAuth } from "../middleware/requireAuth";
 
 export const router = Router();
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -51,55 +53,22 @@ router.post("/register", async (req, res) => {
   }
   const username = rawUsername.trim();
 
-  // if (username.length === 0) {
-  //   return res.status(400).json({ error: "Username cannot be empty." });
-  // }
-  // if (username.length > 50) {
-  //   return res
-  //     .status(400)
-  //     .json({ error: "Username cannot exceed 50 characters." });
-  // }
-
   if (!isValidEmail(rawEmail)) {
-    return res.status(400).json({ error: "Invalid string." });
+    return res.status(400).json({ error: "Invalid email." });
   }
   const email = rawEmail.trim().toLowerCase();
 
   if (!isValidRegistrationPassword(password)) {
     return res.status(400).json({ error: "Invalid password format." });
   }
-  // if (password.length < 8) {
-  //   return res
-  //     .status(400)
-  //     .json({ error: "Password must contain at least 8 characters." });
-  // }
-  // if (email.length > 254) {
-  //   return res.status(400).json({
-  //     error: "Email cannot exceed 254 characters.",
-  //   });
-  // }
-  // const emailValid = emailRegex.test(email); //уже true/false
-  // if (!emailValid) {
-  //   return res.status(400).json({ error: "Invalid email format" });
-  // }
+
   // обработка регистрации
-  // const existingUser = await prisma.user.findUnique({
-  //   where: { username: username },
-  // });
-  // if (existingUser !== null) {
-  //   return res.status(409).json({ error: "This username already exists" });
-  // }
+
   const existingUser = await findExistingUser(username);
   if (existingUser !== null) {
-    return res.status(409).json({ error: "This username already exists" });
+    return res.status(409).json({ error: "This username already exists." });
   }
 
-  // const existingEmail = await prisma.user.findUnique({
-  //   where: { email: email },
-  // });
-  // if (existingEmail !== null) {
-  //   return res.status(409).json({ error: "This email already exists" });
-  // }
   const existingEmail = await findExistingEmail(email);
   if (existingEmail !== null) {
     return res.status(409).json({ error: "This email already exists" });
@@ -165,7 +134,35 @@ router.post("/login", async (req, res) => {
     return res.status(403).json({ error: "Account is suspended." });
   }
 
+  const token = await signAccessToken(user.id, user.role);
+
   return res
+    .cookie("access_token", token, {
+      httpOnly: true,
+      secure: false,
+      sameSite: "lax",
+      maxAge: 15 * 60 * 1000,
+    })
     .status(200)
-    .json({ message: "Credentials verified successfully. Login approved." });
+    .json({ message: "Login successful." });
+});
+
+router.get("/me", requireAuth, async (req, res) => {
+  const user = await prisma.user.findUnique({
+    where: { id: res.locals.userId },
+    select: {
+      //не передаем пароль
+      id: true,
+      username: true,
+      email: true,
+      role: true,
+      status: true,
+    },
+  });
+
+  if (user === null) {
+    return res.status(401).json({ message: "User no longer exists." });
+  }
+
+  return res.status(200).json({ user });
 });

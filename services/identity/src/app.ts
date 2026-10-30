@@ -2,10 +2,12 @@ import { errorHandler, notFound } from "@assetstore/shared";
 import express from "express";
 import { prisma } from "./db/prisma";
 import { router } from "./routes/auth.routes";
+import cookieParser from "cookie-parser";
 
 export const app = express();
 
 app.use(express.json());
+app.use(cookieParser());
 
 // Docker healthcheck and Caddy (/api/health/identity) use this; it is not part of the public API.
 app.get("/health", async (_req, res) => {
