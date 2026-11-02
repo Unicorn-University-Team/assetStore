@@ -25,9 +25,10 @@ app.get('/health', async (_req, res) => {
 //   /api/assets/:id/reports, /api/reports/...    reports
 
 // Temporary check of community -> catalog communication; remove once reviews call CatalogClient themselves.
-app.get('/internal/check-asset/:id', requireInternalKey(env.internalKey), async (req: Request<{ id: string }>, res: Response) => {
+async function checkAsset(req: Request<{ id: string }>, res: Response) {
   res.json({ assetId: req.params.id, exists: await CatalogClient.assetExists(req.params.id) });
-});
+}
+app.get('/internal/check-asset/:id', requireInternalKey(env.internalKey), checkAsset);
 
 app.use(notFound);
 app.use(errorHandler);
