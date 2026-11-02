@@ -1,5 +1,7 @@
-import { errorHandler, notFound } from '@assetstore/shared';
-import express from 'express';
+import { errorHandler, notFound, requireInternalKey } from '@assetstore/shared';
+import express, { type Request, type Response } from 'express';
+import { CatalogClient } from './clients/catalog.client';
+import { env } from './config/env';
 import { prisma } from './db/prisma';
 
 export const app = express();
@@ -21,6 +23,11 @@ app.get('/health', async (_req, res) => {
 //   /api/assets/:id/reviews, /api/reviews/...    reviews
 //   /api/collections/...                         collections
 //   /api/assets/:id/reports, /api/reports/...    reports
+
+// Temporary check of community -> catalog communication; remove once reviews call CatalogClient themselves.
+app.get('/internal/check-asset/:id', requireInternalKey(env.internalKey), async (req: Request<{ id: string }>, res: Response) => {
+  res.json({ assetId: req.params.id, exists: await CatalogClient.assetExists(req.params.id) });
+});
 
 app.use(notFound);
 app.use(errorHandler);

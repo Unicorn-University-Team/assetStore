@@ -1,8 +1,9 @@
-import { errorHandler, notFound } from '@assetstore/shared';
+import { errorHandler, notFound, requireInternalKey } from '@assetstore/shared';
 import express from 'express';
 import { env } from './config/env';
 import { prisma } from './db/prisma';
 import { routes } from './routes';
+import { internalRoutes } from './routes/internal.routes';
 import { FileStorage } from './storage/file-storage';
 import { renderStatusPage } from './views/status.view';
 
@@ -36,6 +37,8 @@ app.get('/health', async (_req, res) => {
 });
 
 app.use('/api', routes);
+// Calls from other services inside the Docker network (README, service-to-service communication).
+app.use('/internal', requireInternalKey(env.internalKey), internalRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
