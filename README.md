@@ -15,6 +15,7 @@ Web běží na **https://3-125-15-78.sslip.io** (dočasná adresa, dokud nemáme
 - [Komunikace mezi službami](#komunikace-mezi-službami)
 - [Pravidla pro routy: frontend × backend](#pravidla-pro-routy-frontend--backend)
 - [API](#api)
+- [Práce s Gitem](#práce-s-gitem)
 - [CI](#ci)
 - [Nasazení](#nasazení)
 
@@ -423,6 +424,26 @@ Asset v odpovědi (`services/catalog/src/views/asset.view.ts`):
   "updatedAt": "2026-10-21T21:38:54.677Z"
 }
 ```
+
+## Práce s Gitem
+
+Jediná dlouhodobá větev je `main`. Co je v `main`, to běží na serveru.
+
+1. Na každý úkol si uděláš vlastní větev z aktuálního `main`:
+   ```bash
+   git switch main && git pull
+   git switch -c feature/<krátký-popis>     # opravy: fix/<popis>
+   ```
+2. Commituješ a pushuješ do své větve (`git push -u origin feature/<krátký-popis>`).
+3. Otevřeš pull request do `main`. Počkáš, až CI zezelená a Yura PR schválí.
+4. PR mergneš sám tlačítkem **Merge pull request**. Větev se po mergi sama smaže.
+5. Po mergi se `main` sám nasadí na server (viz [Nasazení](#nasazení)).
+
+Pravidla:
+
+- Do `main` se nepushuje napřímo, jen přes PR. Bez zeleného CI a bez schválení nejde PR mergnout.
+- Když je tvoje větev pozadu za `main`, aktualizuj ji: `git pull origin main` (nebo tlačítko **Update branch** v PR).
+- Žádné sdílené větve typu `dev/backend` nebo `dev/frontend`: každý PR jde rovnou do `main`.
 
 ## CI
 
