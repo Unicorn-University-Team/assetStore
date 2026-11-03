@@ -4,6 +4,8 @@ import * as argon2 from "argon2";
 import { Prisma } from "../generated/prisma/client";
 import { signAccessToken } from "../auth/jwt";
 import { requireAuth } from "../middleware/requireAuth";
+import { hashRefreshToken } from "../auth/refreshToken";
+import { generateRefreshToken } from "../auth/refreshToken";
 
 export const router = Router();
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -134,7 +136,21 @@ router.post("/login", async (req, res) => {
     return res.status(403).json({ error: "Account is suspended." });
   }
 
-  const token = await signAccessToken(user.id, user.role);
+  const refreshToken = generateRefreshToken();
+  const refreshTokenHash = hashRefreshToken(refreshToken);
+
+  const refreshTokenLifetimeMs = 30 * 24 * 60 * 60 * 1000;
+  const expiresAt = new Date(Date.now() + refreshTokenLifetimeMs);
+
+  const session = await prisma.session.create({
+    data: {
+      userId: user.id,
+      refreshTokenHash: refreshTokenHash,
+      expiresAt: expiresAt,
+    },
+  });
+
+  const token = await signAccessToken(user.id, user.role, session.expiresAt);
 
   return res
     .cookie("access_token", token, {
@@ -142,6 +158,12 @@ router.post("/login", async (req, res) => {
       secure: false,
       sameSite: "lax",
       maxAge: 15 * 60 * 1000,
+    })
+    .cookie("refresh_token", refreshToken, {
+      httpOnly: true,
+      secure: false,
+      sameSite: "lax",
+      maxAge: 30 * 24 * 60 * 60 * 1000,
     })
     .status(200)
     .json({ message: "Login successful." });
@@ -165,4 +187,105 @@ router.get("/me", requireAuth, async (req, res) => {
   }
 
   return res.status(200).json({ user });
+});
+
+router.post("/refresh", async (req, res, next) => {
+  const refreshToken = req.cookies?.refresh_token;
+  if (typeof refreshToken !== "string" || refreshToken.length === 0) {
+    return res.status(401).json({ message: "Refresh token is required." });
+  }
+  const refreshTokenHash = hashRefreshToken(refreshToken);
+  const session = await prisma.session.findUnique({
+    where: { refreshTokenHash: refreshTokenHash },
+  });
+  if (!session) {
+    return res.status(401).json({ message: "Invalid refresh token." });
+  }
+
+  if (session.expiresAt.getTime() <= Date.now() || session.revokedAt !== null) {
+    return res.status(401).json({ message: "Unable to refresh the token." });
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.userId },
+  });
+
+  if (!user) {
+    return res.status(401).json({ message: "Invalid user." });
+  }
+
+  if (user.status !== "ACTIVE") {
+    return res.status(401).json({ message: "Unable to refresh the token." });
+  }
+
+  const newRefreshToken = generateRefreshToken();
+  const newRefreshTokenHash = hashRefreshToken(newRefreshToken);
+  const newAccessToken = await signAccessToken(
+    user.id,
+    user.role,
+    session.expiresAt,
+  );
+
+  const result = await prisma.session.updateMany({
+    where: {
+      id: session.id,
+      refreshTokenHash: refreshTokenHash,
+      revokedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+    data: {
+      refreshTokenHash: newRefreshTokenHash,
+    },
+  });
+
+  if (result.count !== 1) {
+    return res.status(401).json({ message: "Unable to refresh the token." });
+  }
+
+  return res
+    .cookie("access_token", newAccessToken, {
+      httpOnly: true,
+      secure: false,
+      sameSite: "lax",
+      maxAge: 15 * 60 * 1000,
+    })
+    .cookie("refresh_token", newRefreshToken, {
+      httpOnly: true,
+      secure: false,
+      sameSite: "lax",
+      maxAge: session.expiresAt.getTime() - Date.now(),
+    })
+    .status(200)
+    .json({ message: "Token refreshed successfully." });
+});
+
+router.post("/logout", async (req, res) => {
+  const refreshToken = req.cookies?.refresh_token;
+
+  if (typeof refreshToken === "string" && refreshToken.length > 0) {
+    const refreshTokenHash = hashRefreshToken(refreshToken);
+
+    await prisma.session.updateMany({
+      where: { refreshTokenHash: refreshTokenHash, revokedAt: null },
+      data: {
+        revokedAt: new Date(),
+      },
+    });
+  }
+
+  return res
+    .clearCookie("access_token", {
+      httpOnly: true,
+      secure: false,
+      sameSite: "lax",
+      path: "/",
+    })
+    .clearCookie("refresh_token", {
+      httpOnly: true,
+      secure: false,
+      sameSite: "lax",
+      path: "/",
+    })
+    .status(200)
+    .json({ message: "Logout successful." });
 });

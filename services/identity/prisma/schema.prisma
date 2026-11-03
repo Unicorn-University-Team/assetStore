@@ -23,12 +23,23 @@ enum Status {
 }
 
 model User {
-  id Int @id @default(autoincrement())
+  id String @id @default(uuid()) @db.Uuid
   username String @db.VarChar(50) @unique
   email String @unique @db.VarChar(254)
   passwordHash String @db.VarChar(255)
   role Role @default(USER)
   status Status @default(ACTIVE)
+  sessions Session[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model Session {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokenHash String @unique @db.VarChar(255)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
 }

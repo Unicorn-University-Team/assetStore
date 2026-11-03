@@ -11,14 +11,27 @@ export async function loadPrivateKey() {
   return privateKey;
 }
 
-export async function signAccessToken(userId: number, role: "USER" | "ADMIN") {
+export async function signAccessToken(
+  userId: string,
+  role: "USER" | "ADMIN",
+  sessionExpiresAt: Date,
+) {
+  const remainingTime = sessionExpiresAt.getTime() - Date.now();
+  const accessTokenLifeTime = 15 * 60 * 1000;
+  if (remainingTime <= 0) {
+    throw new Error("Session has expired.");
+  }
+  const accessTokenExpiresAt = new Date(
+    Date.now() + Math.min(accessTokenLifeTime, remainingTime),
+  );
+
   const token = await new SignJWT({ role })
     .setProtectedHeader({
       alg: "RS256",
     })
-    .setSubject(String(userId))
+    .setSubject(userId)
     .setIssuedAt() // автоматически ставит актуальное время
-    .setExpirationTime("15m")
+    .setExpirationTime(accessTokenExpiresAt)
     .sign(await loadPrivateKey());
 
   return token;

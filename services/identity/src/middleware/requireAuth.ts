@@ -16,13 +16,27 @@ export async function requireAuth(
 
   try {
     const payload = await verifyAccessToken(token);
-    const userId = Number(payload.sub);
+    const userId = payload.sub;
 
-    if (!(Number.isSafeInteger(userId) && userId > 0)) {
-      return res.status(401).json({ error: "Authorization required." });
+    if (
+      typeof userId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        userId,
+      )
+    ) {
+      return res.status(401).json({
+        message: "Invalid token.",
+      });
     }
+    const role = payload.role;
 
+    if (role !== "USER" && role !== "ADMIN") {
+      return res.status(401).json({
+        error: "Invalid token role.",
+      });
+    }
     res.locals.userId = userId;
+    res.locals.role = role;
   } catch (error) {
     if (
       error instanceof errors.JWTExpired ||
