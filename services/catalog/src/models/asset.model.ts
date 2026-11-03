@@ -1,5 +1,6 @@
 import { prisma } from '../db/prisma';
 import type { Asset } from '../generated/prisma/client';
+import { AuditLogModel, diffFields } from './audit-log.model';
 
 export type { Asset };
 
@@ -46,13 +47,29 @@ export const AssetModel = {
     return prisma.asset.findUnique({ where: { id } });
   },
 
+  // Creating, updating and deleting write an audit log entry in the same transaction:
+  // if the entry cannot be written, the change is undone (AUDIT_LOG.md, section 4).
   create(input: AssetInput): Promise<Asset> {
-    return prisma.asset.create({ data: input });
+    return prisma.$transaction(async (tx) => {
+      const asset = await tx.asset.create({ data: input });
+      await AuditLogModel.create(tx, { action: 'assetCreated', objectType: 'asset', objectId: asset.id });
+      return asset;
+    });
   },
 
-  async update(id: string, input: AssetUpdate): Promise<Asset | null> {
-    const result = await prisma.asset.updateMany({ where: { id }, data: input });
-    return result.count === 0 ? null : prisma.asset.findUnique({ where: { id } });
+  // An update that changes nothing is not logged.
+  update(id: string, input: AssetUpdate): Promise<Asset | null> {
+    return prisma.$transaction(async (tx) => {
+      const before = await tx.asset.findUnique({ where: { id } });
+      if (!before) return null;
+
+      const after = await tx.asset.update({ where: { id }, data: input });
+      const changes = diffFields(before, after, ['name', 'description']);
+      if (Object.keys(changes).length > 0) {
+        await AuditLogModel.create(tx, { action: 'assetUpdated', objectType: 'asset', objectId: id, changes });
+      }
+      return after;
+    });
   },
 
   // Only the server changes downloadCount (spec, AST-4).
@@ -60,11 +77,15 @@ export const AssetModel = {
     await prisma.asset.update({ where: { id }, data: { downloadCount: { increment: 1 } } });
   },
 
-  // Returns the deleted asset, so the caller can remove its file from S3.
-  async remove(id: string): Promise<Asset | null> {
-    const asset = await prisma.asset.findUnique({ where: { id } });
-    if (!asset) return null;
-    await prisma.asset.delete({ where: { id } });
-    return asset;
+  // Returns the deleted asset, so the caller can remove its file from S3 after the transaction:
+  // if the audit log fails, the row comes back and the file must still be there.
+  remove(id: string): Promise<Asset | null> {
+    return prisma.$transaction(async (tx) => {
+      const asset = await tx.asset.findUnique({ where: { id } });
+      if (!asset) return null;
+      await tx.asset.delete({ where: { id } });
+      await AuditLogModel.create(tx, { action: 'assetDeleted', objectType: 'asset', objectId: id });
+      return asset;
+    });
   },
 };
