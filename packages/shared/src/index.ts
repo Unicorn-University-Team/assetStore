@@ -4,3 +4,5 @@ export { requiredEnv } from './env';
 export { errorHandler } from './errorHandler';
 export { HttpError } from './HttpError';
 export { notFound } from './notFound';
+export { callService, type CallServiceOptions } from './callService';
+export { INTERNAL_KEY_HEADER, requireInternalKey } from './internalKey';
