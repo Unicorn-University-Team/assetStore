@@ -13,6 +13,7 @@ Web běží na **https://3-125-15-78.sslip.io** (dočasná adresa, dokud nemáme
 - [Jak funguje nahrávání a stahování souborů](#jak-funguje-nahrávání-a-stahování-souborů)
 - [Ochrana zápisu](#ochrana-zápisu)
 - [Komunikace mezi službami](#komunikace-mezi-službami)
+- [Audit log](#audit-log)
 - [Pravidla pro routy: frontend × backend](#pravidla-pro-routy-frontend--backend)
 - [API](#api)
 - [CI](#ci)
@@ -369,6 +370,43 @@ curl http://localhost:3003/internal/check-asset/<id>          # community → ca
 ```
 
 S nastaveným `INTERNAL_KEY` přidat `-H 'X-Internal-Key: <klíč>'`. Když catalog neběží, druhý příkaz vrátí 503.
+
+## Audit log
+
+Záznam důležitých akcí: kdo co udělal, s jakým objektem a kdy. Slouží k řešení sporů, v aplikaci se nezobrazuje.
+Záznamy se nikdy nemění ani nemažou.
+
+Každá služba má vlastní tabulku `audit_log` a model `src/models/audit-log.model.ts`. Model `AuditLog` je ve všech
+třech `schema.prisma` stejný a tak má zůstat.
+
+| Služba | Akce | Stav |
+|---|---|---|
+| catalog | `assetCreated`, `assetUpdated`, `assetDeleted` | zapisuje se |
+| community | `reportResolved`, `reportRejected` | jen tabulka a model, příkazy pro reporty zatím nejsou |
+| identity | `userDeleted` | jen tabulka a model, mazání uživatele zatím není |
+
+Sloupce: `actorId` (kdo akci provedl), `action`, `objectType` (`asset`, `report`, `user`), `objectId`, `changes`
+a `createdAt`. `changes` je jen u `assetUpdated`, obsahuje změněná pole: `{ "name": { "old": "…", "new": "…" } }`.
+`actorId` je zatím prázdný, protože služby ještě neznají přihlášeného uživatele.
+
+Pravidla:
+
+1. **Akce a záznam jdou v jedné transakci.** Když se záznam nepovede zapsat, celá akce se vrátí a odpověď je **500**.
+2. **Neúspěšné pokusy se nezapisují.** Validace a kontrola práv proběhnou v controlleru ještě před transakcí.
+3. **`userDeleted` obsahuje jen id**, bez osobních údajů. Mazání souvisejících dat v jiných službách vlastní záznamy
+   nepíše.
+
+```ts
+return prisma.$transaction(async (tx) => {
+  const report = await tx.report.update({ ... });       // akce
+  await AuditLogModel.create(tx, { action: 'reportResolved', objectType: 'report', objectId: report.id });
+  return report;
+});
+```
+
+Uvnitř transakce používat jen `tx`, ne `prisma`, jinak dotaz proběhne mimo transakci. Soubory v S3 a volání jiných
+služeb se s transakcí nevrátí. Při chybě se uklízejí ručně, vzorem jsou `create` a `remove` v
+`services/catalog/src/controllers/asset.controller.ts`.
 
 ## Pravidla pro routy: frontend × backend
 
