@@ -14,4 +14,6 @@ export const env = {
   maxStorageGb: Number(process.env.MAX_STORAGE_GB) || 5,
   // Shared team key for upload, edit and delete until there are user accounts. Empty = writing is open.
   writeKey: process.env.WRITE_KEY ?? '',
+  // Shared secret that other services send in X-Internal-Key on /internal routes. Empty = not checked.
+  internalKey: process.env.INTERNAL_KEY ?? '',
 };

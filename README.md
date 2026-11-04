@@ -12,8 +12,10 @@ Web běží na **https://3-125-15-78.sslip.io** (dočasná adresa, dokud nemáme
 - [Databáze a migrace](#databáze-a-migrace)
 - [Jak funguje nahrávání a stahování souborů](#jak-funguje-nahrávání-a-stahování-souborů)
 - [Ochrana zápisu](#ochrana-zápisu)
+- [Komunikace mezi službami](#komunikace-mezi-službami)
 - [Pravidla pro routy: frontend × backend](#pravidla-pro-routy-frontend--backend)
 - [API](#api)
+- [Práce s Gitem](#práce-s-gitem)
 - [CI](#ci)
 - [Nasazení](#nasazení)
 
@@ -73,8 +75,8 @@ prohlížeč ──▶ Caddy (API gateway, HTTPS)
   `/api/health/identity`, `/api/health/catalog`, `/api/health/community`.
 - **Přihlášení (přijde v PR identity):** krátký JWT a refresh token v httpOnly cookie. Token podepisuje identity,
   ostatní služby ho ověřují samy veřejným klíčem.
-- **Komunikace mezi službami (přijde s funkcemi):** přímé HTTP volání uvnitř sítě Dockeru na `/internal/...`,
-  které Caddy ven nepouští. Například smazání assetu v catalog → community smaže jeho recenze a reporty.
+- **Komunikace mezi službami:** přímé HTTP volání uvnitř sítě Dockeru na `/internal/...`, které Caddy ven
+  nepouští, chráněné klíčem `INTERNAL_KEY`. Podrobně v [Komunikace mezi službami](#komunikace-mezi-službami).
 - **Společný kód** je v `packages/shared` (`import { HttpError } from '@assetstore/shared'`). Po změně:
   `npm run build -w @assetstore/shared`.
 
@@ -316,6 +318,59 @@ curl -H 'X-Write-Key: <klíč>' -F name='Meč' -F type=3d -F file=@sword.glb htt
 Klíč je záměrně v hlavičce `X-Write-Key`, ne v `Authorization`: tu používá heslo na celý web (`SITE_AUTH`).
 Až bude přihlášení, nahradí klíč kontrola uživatele a jeho role.
 
+## Komunikace mezi službami
+
+Služba nikdy nesahá do cizí databáze. Když potřebuje cizí data, zeptá se vlastníka přes HTTP na jeho cestě
+`/internal/...`. Příklad: community před vytvořením recenze ověří u catalog, že asset existuje.
+
+```
+community ──GET /internal/assets/:id/exists──▶ catalog ──▶ databáze catalog
+          ◀────────── { "exists": true } ──────────┘
+```
+
+- **Adresy služeb** jsou v proměnných prostředí (`CATALOG_URL`…) v `src/config/env.ts` dané služby.
+  Lokálně `http://localhost:3002`, v Dockeru jméno služby `http://catalog:3000` (`docker-compose.yml`);
+  `localhost` v kontejneru je kontejner sám.
+- **Ochrana:** Caddy posílá službám jen `/api/...`, takže `/internal` zvenku dostupné není. Navíc každé volání nese
+  hlavičku `X-Internal-Key` se společným klíčem `INTERNAL_KEY` (stejná hodnota ve všech službách). Bez klíče nebo
+  se špatným klíčem je odpověď **401**. Prázdný `INTERNAL_KEY` (lokální vývoj) = bez kontroly.
+- **Volání:** jen přes `callService` z `@assetstore/shared`. Přidá klíč, po 3 s to vzdá a chyby převede na
+  `HttpError`: služba neběží nebo neodpoví včas → **503**, odpoví chybou → **502**. Podrobnosti jdou do logu.
+
+| Služba | Cesta | Odpověď | Kdo volá |
+|---|---|---|---|
+| catalog | `GET /internal/assets/:id/exists` | `{ "exists": boolean }` | community |
+
+### Nová interní cesta
+
+Příklad: catalog bude chtít, aby community smazala recenze smazaného assetu.
+
+1. **Služba, která odpovídá** (community): cesta v `src/routes/internal.routes.ts`, připojená v `app.ts` přes
+   `app.use('/internal', requireInternalKey(env.internalKey), internalRoutes)`.
+2. **Služba, která volá** (catalog): adresa v `src/config/env.ts` (`communityUrl: process.env.COMMUNITY_URL ??
+   'http://localhost:3003'`), v `.env.example` a v `docker-compose.yml` (`COMMUNITY_URL: http://community:3000`).
+3. Funkce v `src/clients/<služba>.client.ts` (vzor `services/community/src/clients/catalog.client.ts`):
+
+   ```ts
+   await callService(env.communityUrl, `/internal/assets/${id}`, { internalKey: env.internalKey, method: 'DELETE' });
+   ```
+
+4. Přidat řádek do tabulky výše.
+
+Synchronní volání dělat jen tam, kde bez cizích dat nejde akci správně provést (kontrola existence, mazání
+souvisejících dat). Data jen pro zobrazení, třeba název assetu u recenze, ať raději spojí frontend.
+
+### Vyzkoušení
+
+Lokálně musí běžet obě služby (`npm run dev` v `services/catalog` i `services/community`):
+
+```bash
+curl http://localhost:3002/internal/assets/<id>/exists        # catalog přímo
+curl http://localhost:3003/internal/check-asset/<id>          # community → catalog (dočasná ukázková cesta)
+```
+
+S nastaveným `INTERNAL_KEY` přidat `-H 'X-Internal-Key: <klíč>'`. Když catalog neběží, druhý příkaz vrátí 503.
+
 ## Pravidla pro routy: frontend × backend
 
 Frontend i backend běží na jedné adrese. Caddy dělí požadavky podle cesty:
@@ -369,6 +424,26 @@ Asset v odpovědi (`services/catalog/src/views/asset.view.ts`):
   "updatedAt": "2026-10-21T21:38:54.677Z"
 }
 ```
+
+## Práce s Gitem
+
+Jediná dlouhodobá větev je `main`. Co je v `main`, to běží na serveru.
+
+1. Na každý úkol si uděláš vlastní větev z aktuálního `main`:
+   ```bash
+   git switch main && git pull
+   git switch -c feature/<krátký-popis>     # opravy: fix/<popis>
+   ```
+2. Commituješ a pushuješ do své větve (`git push -u origin feature/<krátký-popis>`).
+3. Otevřeš pull request do `main`. Počkáš, až CI zezelená a Yura PR schválí.
+4. PR mergneš sám tlačítkem **Merge pull request**. Větev se po mergi sama smaže.
+5. Po mergi se `main` sám nasadí na server (viz [Nasazení](#nasazení)).
+
+Pravidla:
+
+- Do `main` se nepushuje napřímo, jen přes PR. Bez zeleného CI a bez schválení nejde PR mergnout.
+- Když je tvoje větev pozadu za `main`, aktualizuj ji: `git pull origin main` (nebo tlačítko **Update branch** v PR).
+- Žádné sdílené větve typu `dev/backend` nebo `dev/frontend`: každý PR jde rovnou do `main`.
 
 ## CI
 
@@ -429,6 +504,7 @@ Nastavení serveru je v `~/assetStore/.env`. Vzor je `.env.example`, samotný `.
 | `MAX_UPLOAD_MB` | největší povolená velikost nahrávaného souboru v MB, výchozí 100 |
 | `MAX_STORAGE_GB` | limit pro všechny soubory dohromady v GB, výchozí 5 |
 | `WRITE_KEY` | společný klíč týmu pro nahrávání, úpravy a mazání; prázdné = zápis otevřený |
+| `INTERNAL_KEY` | společný klíč služeb pro volání `/internal/...`; prázdné = bez kontroly. `openssl rand -hex 32` |
 
 Nový server se poprvé připraví skriptem `deploy/setup-server.sh` (Docker, swap, naklonování repozitáře). Instance
 navíc potřebuje IAM roli s přístupem k bucketu.
