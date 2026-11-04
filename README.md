@@ -11,6 +11,7 @@ Web běží na **https://3-125-15-78.sslip.io** (dočasná adresa, dokud nemáme
 - [Lokální vývoj](#lokální-vývoj)
 - [Databáze a migrace](#databáze-a-migrace)
 - [Jak funguje nahrávání a stahování souborů](#jak-funguje-nahrávání-a-stahování-souborů)
+- [Přihlášení](#přihlášení)
 - [Ochrana zápisu](#ochrana-zápisu)
 - [Komunikace mezi službami](#komunikace-mezi-službami)
 - [Audit log](#audit-log)
@@ -293,6 +294,41 @@ Lokálně bez `WRITE_KEY` klíč není potřeba; na serveru se přidá `-H 'X-Wr
 - Vlastník assetu (`owner_id`) a kontrola práv: přijde s přihlášením (AUTH-1 až AUTH-3). Do té doby zápis
   chrání společný klíč, viz [Ochrana zápisu](#ochrana-zápisu).
 - Tagy, recenze, kolekce.
+
+## Přihlášení
+
+Registraci a přihlášení dělá služba identity:
+
+| Metoda | Cesta | Co dělá |
+|---|---|---|
+| `POST` | `/api/auth/register` | `{ username, email, password }` → **201** `{ id, username, email }`, obsazené jméno nebo e-mail → **409** |
+| `POST` | `/api/auth/login` | `{ email, password }` → nastaví cookies `access_token` a `refresh_token`, zablokovaný účet → **403** |
+| `GET` | `/api/auth/me` | přihlášený uživatel `{ user: { id, username, email, role, status } }` |
+| `POST` | `/api/auth/refresh` | vymění refresh token za nový access token a nový refresh token |
+| `POST` | `/api/auth/logout` | zruší session a smaže obě cookies |
+
+- **Access token** je JWT podepsaný RS256: `sub` = id uživatele, `role` = `USER` nebo `ADMIN`, platí 15 minut.
+  Identity podepisuje soukromým klíčem, ostatní služby budou ověřovat veřejným.
+- **Refresh token** platí 30 dní. V databázi je jen jeho hash a při každém refresh se mění za nový.
+- Oba tokeny jsou httpOnly cookies, ne hlavička `Authorization` (tu používá heslo na celý web, `SITE_AUTH`).
+  Na serveru (`NODE_ENV=production`) se posílají jen přes HTTPS.
+
+**Klíče.** Pár klíčů se vygeneruje jednou a do `.env` se dává jako base64 na jednom řádku:
+
+```bash
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out private.pem
+openssl pkey -in private.pem -pubout -out public.pem
+echo "JWT_PRIVATE_KEY=$(base64 < private.pem | tr -d '\n')"
+echo "JWT_PUBLIC_KEY=$(base64 < public.pem | tr -d '\n')"
+rm private.pem public.pem
+```
+
+Lokálně patří oba řádky do `services/identity/.env`, na serveru do `~/assetStore/.env`. Soukromý klíč nikomu
+neposílat a do gitu nepatří. Bez klíčů služba běží, ale přihlášení a refresh vrátí **503**.
+
+**Admin a demo účty:** `cd services/identity && npx tsx src/seed.ts` vytvoří admina `admin@example.com` s heslem
+`SEED_ADMIN_PASSWORD`. S `NODE_ENV=development` navíc aktivního a zablokovaného demo uživatele. Spustit se dá
+opakovaně, existující účty nemění.
 
 ## Ochrana zápisu
 
