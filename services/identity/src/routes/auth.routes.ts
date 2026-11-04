@@ -190,7 +190,7 @@ router.get("/me", requireAuth, async (req, res) => {
   return res.status(200).json({ user });
 });
 
-router.post("/refresh", async (req, res, next) => {
+router.post("/refresh", async (req, res) => {
   const refreshToken = req.cookies?.refresh_token;
   if (typeof refreshToken !== "string" || refreshToken.length === 0) {
     return res.status(401).json({ error: "Refresh token is required." });
