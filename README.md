@@ -471,7 +471,8 @@ a bez CORS.
 
 ## API
 
-Zatím má endpointy jen **catalog**; identity a community jsou připravené prázdné služby.
+Endpointy mají zatím **catalog** (assety) a **identity** (přihlášení, viz [Přihlášení](#přihlášení)); community je
+připravená prázdná služba. Všechno se dá vyzkoušet v Postmanu, viz [Postman](#postman) níže.
 
 | Metoda | Cesta | Co dělá |
 |---|---|---|
@@ -498,6 +499,22 @@ Asset v odpovědi (`services/catalog/src/views/asset.view.ts`):
   "updatedAt": "2026-10-21T21:38:54.677Z"
 }
 ```
+
+### Postman
+
+Kolekce se všemi endpointy je v `postman/AssetStore.postman_collection.json`. V Postmanu: **Import** → vybrat soubor.
+
+1. Spustit backend a frontend lokálně (viz [Lokální vývoj](#lokální-vývoj)). Kolekce volá `{{baseUrl}}`, výchozí
+   `http://localhost:5173`: Vite pošle `/api` na správnou službu stejně jako Caddy na serveru.
+2. **Auth → Login** jako první. Přihlášení nastaví cookies `access_token` a `refresh_token`, Postman je pak sám posílá
+   s dalšími požadavky. E-mail a heslo jsou v proměnných kolekce `email` a `password`: výchozí e-mail je lokální admin
+   ze seedu, heslo doplnit z `SEED_ADMIN_PASSWORD` v `services/identity/.env`.
+3. **Assets → Create**: v záložce Body vybrat soubor u pole `file`. Create a List uloží id do proměnné `assetId`,
+   Get, Update, Download a Delete s ním pak pracují.
+
+Proměnné se mění v kolekci → záložka **Variables**. Pro server: `baseUrl` = `https://3-125-15-78.sslip.io` a
+`writeKey` = klíč pro zápis (dá Yura). Každý požadavek má test na očekávaný status, takže celou složku jde pustit
+přes **Run**.
 
 ## Práce s Gitem
 
