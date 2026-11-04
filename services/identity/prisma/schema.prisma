@@ -1,4 +1,4 @@
-// Database schema of the identity service (its own database: identity). No models yet.
+// Database schema of the identity service (its own database: identity).
 // After a change: `npm run db:migrate -- --name <what-changed>` creates a migration in prisma/migrations
 // and regenerates the client in src/generated/prisma.
 
@@ -10,4 +10,23 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// Audit log (README, Audit log): who did what to which object and when. Each service keeps its own table with the
+// same columns. Rows are only ever added: never updated or deleted.
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  // Empty until the service knows the logged-in user (the token check is not in packages/shared yet).
+  actorId    String?  @map("actor_id") @db.Uuid
+  action     String   @db.VarChar(30)
+  objectType String   @map("object_type") @db.VarChar(20)
+  objectId   String   @map("object_id") @db.Uuid
+  // Only for assetUpdated (catalog); null here.
+  changes    Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([objectType, objectId])
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("audit_log")
 }
