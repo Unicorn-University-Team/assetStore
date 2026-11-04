@@ -70,6 +70,9 @@ services:
       NODE_ENV: production
       PORT: 3000
       DATABASE_URL: postgres://assetstore:${POSTGRES_PASSWORD}@db:5432/identity
+      # Keys for access tokens (README, Přihlášení). Missing = login and refresh answer 503.
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:-}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:-}
 
   catalog:
     <<: *service
