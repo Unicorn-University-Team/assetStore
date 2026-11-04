@@ -1,7 +1,7 @@
 import { HttpError } from '@assetstore/shared';
 import type { Prisma } from '../generated/prisma/client';
 
-// Actions this service writes to the audit log (AUDIT_LOG.md, section 2).
+// Actions this service writes to the audit log (README, Audit log).
 export const AUDIT_ACTIONS = ['assetCreated', 'assetUpdated', 'assetDeleted'] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -33,7 +33,7 @@ export function diffFields<K extends string>(
 
 export const AuditLogModel = {
   // Takes the transaction client (tx), not the global prisma: the entry must be part of the same transaction as
-  // the action, so that a failed write undoes the action too (AUDIT_LOG.md, section 4).
+  // the action, so that a failed write undoes the action too (README, Audit log, rule 1).
   async create(tx: Prisma.TransactionClient, entry: AuditLogEntry): Promise<void> {
     try {
       await tx.auditLog.create({

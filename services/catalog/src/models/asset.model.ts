@@ -48,7 +48,7 @@ export const AssetModel = {
   },
 
   // Creating, updating and deleting write an audit log entry in the same transaction:
-  // if the entry cannot be written, the change is undone (AUDIT_LOG.md, section 4).
+  // if the entry cannot be written, the change is undone (README, Audit log, rule 1).
   create(input: AssetInput): Promise<Asset> {
     return prisma.$transaction(async (tx) => {
       const asset = await tx.asset.create({ data: input });
@@ -63,7 +63,11 @@ export const AssetModel = {
       const before = await tx.asset.findUnique({ where: { id } });
       if (!before) return null;
 
-      const after = await tx.asset.update({ where: { id }, data: input });
+      // updateMany, not update: an asset deleted in the meantime is a 404 (null), not an error.
+      const { count } = await tx.asset.updateMany({ where: { id }, data: input });
+      if (count === 0) return null;
+
+      const after = await tx.asset.findUniqueOrThrow({ where: { id } });
       const changes = diffFields(before, after, ['name', 'description']);
       if (Object.keys(changes).length > 0) {
         await AuditLogModel.create(tx, { action: 'assetUpdated', objectType: 'asset', objectId: id, changes });

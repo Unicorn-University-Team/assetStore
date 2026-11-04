@@ -1,11 +1,11 @@
 import { HttpError } from '@assetstore/shared';
 import type { Prisma } from '../generated/prisma/client';
 
-// Actions this service writes to the audit log (AUDIT_LOG.md, section 2): US-8 delete a user.
+// Actions this service writes to the audit log (README, Audit log): US-8 delete a user.
 export const AUDIT_ACTIONS = ['userDeleted'] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
-// Only ids, no name, e-mail or other personal data (AUDIT_LOG.md, section 5).
+// Only ids, no name, e-mail or other personal data (README, Audit log, rule 3).
 export type AuditLogEntry = {
   action: AuditAction;
   objectType: 'user';
@@ -16,7 +16,7 @@ export type AuditLogEntry = {
 
 export const AuditLogModel = {
   // Takes the transaction client (tx), not the global prisma: the entry must be part of the same transaction as
-  // the user deletion, so that a failed write keeps the user (AUDIT_LOG.md, section 5).
+  // the user deletion, so that a failed write keeps the user (README, Audit log, rule 3).
   async create(tx: Prisma.TransactionClient, entry: AuditLogEntry): Promise<void> {
     try {
       await tx.auditLog.create({
