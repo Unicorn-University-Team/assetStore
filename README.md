@@ -512,9 +512,13 @@ Kolekce se všemi endpointy je v `postman/AssetStore.postman_collection.json`. V
 3. **Assets → Create**: v záložce Body vybrat soubor u pole `file`. Create a List uloží id do proměnné `assetId`,
    Get, Update, Download a Delete s ním pak pracují.
 
-Proměnné se mění v kolekci → záložka **Variables**. Pro server: `baseUrl` = `https://3-125-15-78.sslip.io` a
-`writeKey` = klíč pro zápis (dá Yura). Každý požadavek má test na očekávaný status, takže celou složku jde pustit
-přes **Run**.
+**Prostředí (environments):** importovat i `postman/AssetStore-Local.postman_environment.json` a
+`AssetStore-Server.postman_environment.json` a vpravo nahoře vybrat, proti čemu se volá. Hesla a klíče v souborech
+nejsou: v **Environments** → prostředí → sloupec **Current value** doplnit `password` (lokálně `SEED_ADMIN_PASSWORD`)
+a na serveru `writeKey` (dá Yura). Tajné hodnoty psát jen do **Current value**, ne do Initial value: Initial value
+se synchronizuje do cloudu Postmanu a vidí ji každý, s kým se prostředí sdílí.
+
+Každý požadavek má test na očekávaný status, takže celou složku jde pustit přes **Run**.
 
 ## Práce s Gitem
 
