@@ -1,6 +1,4 @@
 spec
 .env
 node_modules/
-services/identity/keys/
 .DS_Store
-

@@ -1,14 +1,27 @@
-import { importPKCS8, importSPKI, SignJWT } from "jose";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { jwtVerify } from "jose";
+import { HttpError } from "@assetstore/shared";
+import { importPKCS8, importSPKI, jwtVerify, SignJWT } from "jose";
+import { env } from "../config/env";
 
-export async function loadPrivateKey() {
-  const privateKeyPath = resolve(process.cwd(), "keys/private.pem");
-  const privateKeyPem = await readFile(privateKeyPath, "utf8");
-  const privateKey = await importPKCS8(privateKeyPem, "RS256");
+// Keys come from env (base64 of the PEM files) and are imported once, on first use.
+type Key = Awaited<ReturnType<typeof importPKCS8>>;
+let privateKey: Promise<Key> | undefined;
+let publicKey: Promise<Key> | undefined;
 
+function decodePem(base64: string, name: string): string {
+  if (!base64) {
+    throw new HttpError(503, `Login is not available: ${name} is not set.`);
+  }
+  return Buffer.from(base64, "base64").toString("utf8");
+}
+
+export function loadPrivateKey() {
+  privateKey ??= importPKCS8(decodePem(env.jwtPrivateKey, "JWT_PRIVATE_KEY"), "RS256");
   return privateKey;
+}
+
+export function loadPublicKey() {
+  publicKey ??= importSPKI(decodePem(env.jwtPublicKey, "JWT_PUBLIC_KEY"), "RS256");
+  return publicKey;
 }
 
 export async function signAccessToken(
@@ -35,14 +48,6 @@ export async function signAccessToken(
     .sign(await loadPrivateKey());
 
   return token;
-}
-
-export async function loadPublicKey() {
-  const publicKeyUrl = resolve(process.cwd(), "keys/public.pem");
-  const publicKeyPem = await readFile(publicKeyUrl, "utf8");
-  const publicKey = await importSPKI(publicKeyPem, "RS256");
-
-  return publicKey;
 }
 
 //проверка цифровой подписи,срок действия, но не гарантия, что внутри JWT все правильно

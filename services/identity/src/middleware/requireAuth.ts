@@ -25,7 +25,7 @@ export async function requireAuth(
       )
     ) {
       return res.status(401).json({
-        message: "Invalid token.",
+        error: "Invalid token.",
       });
     }
     const role = payload.role;

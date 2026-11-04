@@ -6,6 +6,7 @@ import { signAccessToken } from "../auth/jwt";
 import { requireAuth } from "../middleware/requireAuth";
 import { hashRefreshToken } from "../auth/refreshToken";
 import { generateRefreshToken } from "../auth/refreshToken";
+import { env } from "../config/env";
 
 export const router = Router();
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -155,13 +156,13 @@ router.post("/login", async (req, res) => {
   return res
     .cookie("access_token", token, {
       httpOnly: true,
-      secure: false,
+      secure: env.cookieSecure,
       sameSite: "lax",
       maxAge: 15 * 60 * 1000,
     })
     .cookie("refresh_token", refreshToken, {
       httpOnly: true,
-      secure: false,
+      secure: env.cookieSecure,
       sameSite: "lax",
       maxAge: 30 * 24 * 60 * 60 * 1000,
     })
@@ -183,7 +184,7 @@ router.get("/me", requireAuth, async (req, res) => {
   });
 
   if (user === null) {
-    return res.status(401).json({ message: "User no longer exists." });
+    return res.status(401).json({ error: "User no longer exists." });
   }
 
   return res.status(200).json({ user });
@@ -192,18 +193,18 @@ router.get("/me", requireAuth, async (req, res) => {
 router.post("/refresh", async (req, res, next) => {
   const refreshToken = req.cookies?.refresh_token;
   if (typeof refreshToken !== "string" || refreshToken.length === 0) {
-    return res.status(401).json({ message: "Refresh token is required." });
+    return res.status(401).json({ error: "Refresh token is required." });
   }
   const refreshTokenHash = hashRefreshToken(refreshToken);
   const session = await prisma.session.findUnique({
     where: { refreshTokenHash: refreshTokenHash },
   });
   if (!session) {
-    return res.status(401).json({ message: "Invalid refresh token." });
+    return res.status(401).json({ error: "Invalid refresh token." });
   }
 
   if (session.expiresAt.getTime() <= Date.now() || session.revokedAt !== null) {
-    return res.status(401).json({ message: "Unable to refresh the token." });
+    return res.status(401).json({ error: "Unable to refresh the token." });
   }
 
   const user = await prisma.user.findUnique({
@@ -211,11 +212,11 @@ router.post("/refresh", async (req, res, next) => {
   });
 
   if (!user) {
-    return res.status(401).json({ message: "Invalid user." });
+    return res.status(401).json({ error: "Invalid user." });
   }
 
   if (user.status !== "ACTIVE") {
-    return res.status(401).json({ message: "Unable to refresh the token." });
+    return res.status(401).json({ error: "Unable to refresh the token." });
   }
 
   const newRefreshToken = generateRefreshToken();
@@ -239,19 +240,19 @@ router.post("/refresh", async (req, res, next) => {
   });
 
   if (result.count !== 1) {
-    return res.status(401).json({ message: "Unable to refresh the token." });
+    return res.status(401).json({ error: "Unable to refresh the token." });
   }
 
   return res
     .cookie("access_token", newAccessToken, {
       httpOnly: true,
-      secure: false,
+      secure: env.cookieSecure,
       sameSite: "lax",
       maxAge: 15 * 60 * 1000,
     })
     .cookie("refresh_token", newRefreshToken, {
       httpOnly: true,
-      secure: false,
+      secure: env.cookieSecure,
       sameSite: "lax",
       maxAge: session.expiresAt.getTime() - Date.now(),
     })
@@ -276,13 +277,13 @@ router.post("/logout", async (req, res) => {
   return res
     .clearCookie("access_token", {
       httpOnly: true,
-      secure: false,
+      secure: env.cookieSecure,
       sameSite: "lax",
       path: "/",
     })
     .clearCookie("refresh_token", {
       httpOnly: true,
-      secure: false,
+      secure: env.cookieSecure,
       sameSite: "lax",
       path: "/",
     })
