@@ -49,7 +49,7 @@ export const AssetController = {
   async list(req: Request, res: Response) {
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
     const page = Math.max(1, Math.floor(Number(req.query.page)) || 1);
-    const { items, total } = await AssetModel.findPage({ search, page, pageSize: PAGE_SIZE });
+    const { items, total } = await AssetModel.findPage({ name: search, pageIndex: page - 1, pageSize: PAGE_SIZE });
 
     res.json({ items: items.map(toAssetView), page, pageSize: PAGE_SIZE, total });
   },
