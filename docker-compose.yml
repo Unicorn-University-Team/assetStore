@@ -70,6 +70,9 @@ services:
       NODE_ENV: production
       PORT: 3000
       DATABASE_URL: postgres://assetstore:${POSTGRES_PASSWORD}@db:5432/identity
+      # Keys for access tokens (README, Přihlášení). Missing = login and refresh answer 503.
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:-}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:-}
 
   catalog:
     <<: *service
@@ -88,6 +91,7 @@ services:
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-100}
       MAX_STORAGE_GB: ${MAX_STORAGE_GB:-5}
       WRITE_KEY: ${WRITE_KEY:-}
+      INTERNAL_KEY: ${INTERNAL_KEY:-}
 
   community:
     <<: *service
@@ -100,6 +104,9 @@ services:
       NODE_ENV: production
       PORT: 3000
       DATABASE_URL: postgres://assetstore:${POSTGRES_PASSWORD}@db:5432/community
+      # Other services by their name in the Docker network (not localhost: that is the container itself).
+      CATALOG_URL: http://catalog:3000
+      INTERNAL_KEY: ${INTERNAL_KEY:-}
 
   # Caddy with the built frontend inside (frontend/Dockerfile): serves the site, routes /api to the services.
   caddy:

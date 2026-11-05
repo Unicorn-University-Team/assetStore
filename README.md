@@ -11,9 +11,13 @@ Web běží na **https://3-125-15-78.sslip.io** (dočasná adresa, dokud nemáme
 - [Lokální vývoj](#lokální-vývoj)
 - [Databáze a migrace](#databáze-a-migrace)
 - [Jak funguje nahrávání a stahování souborů](#jak-funguje-nahrávání-a-stahování-souborů)
+- [Přihlášení](#přihlášení)
 - [Ochrana zápisu](#ochrana-zápisu)
+- [Komunikace mezi službami](#komunikace-mezi-službami)
+- [Audit log](#audit-log)
 - [Pravidla pro routy: frontend × backend](#pravidla-pro-routy-frontend--backend)
 - [API](#api)
+- [Práce s Gitem](#práce-s-gitem)
 - [CI](#ci)
 - [Nasazení](#nasazení)
 
@@ -73,8 +77,8 @@ prohlížeč ──▶ Caddy (API gateway, HTTPS)
   `/api/health/identity`, `/api/health/catalog`, `/api/health/community`.
 - **Přihlášení (přijde v PR identity):** krátký JWT a refresh token v httpOnly cookie. Token podepisuje identity,
   ostatní služby ho ověřují samy veřejným klíčem.
-- **Komunikace mezi službami (přijde s funkcemi):** přímé HTTP volání uvnitř sítě Dockeru na `/internal/...`,
-  které Caddy ven nepouští. Například smazání assetu v catalog → community smaže jeho recenze a reporty.
+- **Komunikace mezi službami:** přímé HTTP volání uvnitř sítě Dockeru na `/internal/...`, které Caddy ven
+  nepouští, chráněné klíčem `INTERNAL_KEY`. Podrobně v [Komunikace mezi službami](#komunikace-mezi-službami).
 - **Společný kód** je v `packages/shared` (`import { HttpError } from '@assetstore/shared'`). Po změně:
   `npm run build -w @assetstore/shared`.
 
@@ -291,6 +295,41 @@ Lokálně bez `WRITE_KEY` klíč není potřeba; na serveru se přidá `-H 'X-Wr
   chrání společný klíč, viz [Ochrana zápisu](#ochrana-zápisu).
 - Tagy, recenze, kolekce.
 
+## Přihlášení
+
+Registraci a přihlášení dělá služba identity:
+
+| Metoda | Cesta | Co dělá |
+|---|---|---|
+| `POST` | `/api/auth/register` | `{ username, email, password }` → **201** `{ id, username, email }`, obsazené jméno nebo e-mail → **409** |
+| `POST` | `/api/auth/login` | `{ email, password }` → nastaví cookies `access_token` a `refresh_token`, zablokovaný účet → **403** |
+| `GET` | `/api/auth/me` | přihlášený uživatel `{ user: { id, username, email, role, status } }` |
+| `POST` | `/api/auth/refresh` | vymění refresh token za nový access token a nový refresh token |
+| `POST` | `/api/auth/logout` | zruší session a smaže obě cookies |
+
+- **Access token** je JWT podepsaný RS256: `sub` = id uživatele, `role` = `USER` nebo `ADMIN`, platí 15 minut.
+  Identity podepisuje soukromým klíčem, ostatní služby budou ověřovat veřejným.
+- **Refresh token** platí 30 dní. V databázi je jen jeho hash a při každém refresh se mění za nový.
+- Oba tokeny jsou httpOnly cookies, ne hlavička `Authorization` (tu používá heslo na celý web, `SITE_AUTH`).
+  Na serveru (`NODE_ENV=production`) se posílají jen přes HTTPS.
+
+**Klíče.** Pár klíčů se vygeneruje jednou a do `.env` se dává jako base64 na jednom řádku:
+
+```bash
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out private.pem
+openssl pkey -in private.pem -pubout -out public.pem
+echo "JWT_PRIVATE_KEY=$(base64 < private.pem | tr -d '\n')"
+echo "JWT_PUBLIC_KEY=$(base64 < public.pem | tr -d '\n')"
+rm private.pem public.pem
+```
+
+Lokálně patří oba řádky do `services/identity/.env`, na serveru do `~/assetStore/.env`. Soukromý klíč nikomu
+neposílat a do gitu nepatří. Bez klíčů služba běží, ale přihlášení a refresh vrátí **503**.
+
+**Admin a demo účty:** `cd services/identity && npx tsx src/seed.ts` vytvoří admina `admin@example.com` s heslem
+`SEED_ADMIN_PASSWORD`. S `NODE_ENV=development` navíc aktivního a zablokovaného demo uživatele. Spustit se dá
+opakovaně, existující účty nemění.
+
 ## Ochrana zápisu
 
 Dokud nemáme registraci a přihlášení, nikdo cizí nesmí nahrávat, upravovat ani mazat assety. Proto platí dvě pojistky:
@@ -315,6 +354,96 @@ curl -H 'X-Write-Key: <klíč>' -F name='Meč' -F type=3d -F file=@sword.glb htt
 
 Klíč je záměrně v hlavičce `X-Write-Key`, ne v `Authorization`: tu používá heslo na celý web (`SITE_AUTH`).
 Až bude přihlášení, nahradí klíč kontrola uživatele a jeho role.
+
+## Komunikace mezi službami
+
+Služba nikdy nesahá do cizí databáze. Když potřebuje cizí data, zeptá se vlastníka přes HTTP na jeho cestě
+`/internal/...`. Příklad: community před vytvořením recenze ověří u catalog, že asset existuje.
+
+```
+community ──GET /internal/assets/:id/exists──▶ catalog ──▶ databáze catalog
+          ◀────────── { "exists": true } ──────────┘
+```
+
+- **Adresy služeb** jsou v proměnných prostředí (`CATALOG_URL`…) v `src/config/env.ts` dané služby.
+  Lokálně `http://localhost:3002`, v Dockeru jméno služby `http://catalog:3000` (`docker-compose.yml`);
+  `localhost` v kontejneru je kontejner sám.
+- **Ochrana:** Caddy posílá službám jen `/api/...`, takže `/internal` zvenku dostupné není. Navíc každé volání nese
+  hlavičku `X-Internal-Key` se společným klíčem `INTERNAL_KEY` (stejná hodnota ve všech službách). Bez klíče nebo
+  se špatným klíčem je odpověď **401**. Prázdný `INTERNAL_KEY` (lokální vývoj) = bez kontroly.
+- **Volání:** jen přes `callService` z `@assetstore/shared`. Přidá klíč, po 3 s to vzdá a chyby převede na
+  `HttpError`: služba neběží nebo neodpoví včas → **503**, odpoví chybou → **502**. Podrobnosti jdou do logu.
+
+| Služba | Cesta | Odpověď | Kdo volá |
+|---|---|---|---|
+| catalog | `GET /internal/assets/:id/exists` | `{ "exists": boolean }` | community |
+
+### Nová interní cesta
+
+Příklad: catalog bude chtít, aby community smazala recenze smazaného assetu.
+
+1. **Služba, která odpovídá** (community): cesta v `src/routes/internal.routes.ts`, připojená v `app.ts` přes
+   `app.use('/internal', requireInternalKey(env.internalKey), internalRoutes)`.
+2. **Služba, která volá** (catalog): adresa v `src/config/env.ts` (`communityUrl: process.env.COMMUNITY_URL ??
+   'http://localhost:3003'`), v `.env.example` a v `docker-compose.yml` (`COMMUNITY_URL: http://community:3000`).
+3. Funkce v `src/clients/<služba>.client.ts` (vzor `services/community/src/clients/catalog.client.ts`):
+
+   ```ts
+   await callService(env.communityUrl, `/internal/assets/${id}`, { internalKey: env.internalKey, method: 'DELETE' });
+   ```
+
+4. Přidat řádek do tabulky výše.
+
+Synchronní volání dělat jen tam, kde bez cizích dat nejde akci správně provést (kontrola existence, mazání
+souvisejících dat). Data jen pro zobrazení, třeba název assetu u recenze, ať raději spojí frontend.
+
+### Vyzkoušení
+
+Lokálně musí běžet obě služby (`npm run dev` v `services/catalog` i `services/community`):
+
+```bash
+curl http://localhost:3002/internal/assets/<id>/exists        # catalog přímo
+curl http://localhost:3003/internal/check-asset/<id>          # community → catalog (dočasná ukázková cesta)
+```
+
+S nastaveným `INTERNAL_KEY` přidat `-H 'X-Internal-Key: <klíč>'`. Když catalog neběží, druhý příkaz vrátí 503.
+
+## Audit log
+
+Záznam důležitých akcí: kdo co udělal, s jakým objektem a kdy. Slouží k řešení sporů, v aplikaci se nezobrazuje.
+Záznamy se nikdy nemění ani nemažou.
+
+Každá služba má vlastní tabulku `audit_log` a model `src/models/audit-log.model.ts`. Model `AuditLog` je ve všech
+třech `schema.prisma` stejný a tak má zůstat.
+
+| Služba | Akce | Stav |
+|---|---|---|
+| catalog | `assetCreated`, `assetUpdated`, `assetDeleted` | zapisuje se |
+| community | `reportResolved`, `reportRejected` | jen tabulka a model, příkazy pro reporty zatím nejsou |
+| identity | `userDeleted` | jen tabulka a model, mazání uživatele zatím není |
+
+Sloupce: `actorId` (kdo akci provedl), `action`, `objectType` (`asset`, `report`, `user`), `objectId`, `changes`
+a `createdAt`. `changes` je jen u `assetUpdated`, obsahuje změněná pole: `{ "name": { "old": "…", "new": "…" } }`.
+`actorId` je zatím prázdný, protože služby ještě neznají přihlášeného uživatele.
+
+Pravidla:
+
+1. **Akce a záznam jdou v jedné transakci.** Když se záznam nepovede zapsat, celá akce se vrátí a odpověď je **500**.
+2. **Neúspěšné pokusy se nezapisují.** Validace a kontrola práv proběhnou v controlleru ještě před transakcí.
+3. **`userDeleted` obsahuje jen id**, bez osobních údajů. Mazání souvisejících dat v jiných službách vlastní záznamy
+   nepíše.
+
+```ts
+return prisma.$transaction(async (tx) => {
+  const report = await tx.report.update({ ... });       // akce
+  await AuditLogModel.create(tx, { action: 'reportResolved', objectType: 'report', objectId: report.id });
+  return report;
+});
+```
+
+Uvnitř transakce používat jen `tx`, ne `prisma`, jinak dotaz proběhne mimo transakci. Soubory v S3 a volání jiných
+služeb se s transakcí nevrátí. Při chybě se uklízejí ručně, vzorem jsou `create` a `remove` v
+`services/catalog/src/controllers/asset.controller.ts`.
 
 ## Pravidla pro routy: frontend × backend
 
@@ -342,7 +471,8 @@ a bez CORS.
 
 ## API
 
-Zatím má endpointy jen **catalog**; identity a community jsou připravené prázdné služby.
+Endpointy mají zatím **catalog** (assety) a **identity** (přihlášení, viz [Přihlášení](#přihlášení)); community je
+připravená prázdná služba. Všechno se dá vyzkoušet v Postmanu, viz [Postman](#postman) níže.
 
 | Metoda | Cesta | Co dělá |
 |---|---|---|
@@ -369,6 +499,46 @@ Asset v odpovědi (`services/catalog/src/views/asset.view.ts`):
   "updatedAt": "2026-10-21T21:38:54.677Z"
 }
 ```
+
+### Postman
+
+Kolekce se všemi endpointy je v `postman/AssetStore.postman_collection.json`. V Postmanu: **Import** → vybrat soubor.
+
+1. Spustit backend a frontend lokálně (viz [Lokální vývoj](#lokální-vývoj)). Kolekce volá `{{baseUrl}}`, výchozí
+   `http://localhost:5173`: Vite pošle `/api` na správnou službu stejně jako Caddy na serveru.
+2. **Auth → Login** jako první. Přihlášení nastaví cookies `access_token` a `refresh_token`, Postman je pak sám posílá
+   s dalšími požadavky. E-mail a heslo jsou v proměnných kolekce `email` a `password`: výchozí e-mail je lokální admin
+   ze seedu, heslo doplnit z `SEED_ADMIN_PASSWORD` v `services/identity/.env`.
+3. **Assets → Create**: v záložce Body vybrat soubor u pole `file`. Create a List uloží id do proměnné `assetId`,
+   Get, Update, Download a Delete s ním pak pracují.
+
+**Prostředí (environments):** importovat i `postman/AssetStore-Local.postman_environment.json` a
+`AssetStore-Server.postman_environment.json` a vpravo nahoře vybrat, proti čemu se volá. Hesla a klíče v souborech
+nejsou: v **Environments** → prostředí → sloupec **Current value** doplnit `password` (lokálně `SEED_ADMIN_PASSWORD`)
+a na serveru `writeKey` (dá Yura). Tajné hodnoty psát jen do **Current value**, ne do Initial value: Initial value
+se synchronizuje do cloudu Postmanu a vidí ji každý, s kým se prostředí sdílí.
+
+Každý požadavek má test na očekávaný status, takže celou složku jde pustit přes **Run**.
+
+## Práce s Gitem
+
+Jediná dlouhodobá větev je `main`. Co je v `main`, to běží na serveru.
+
+1. Na každý úkol si uděláš vlastní větev z aktuálního `main`:
+   ```bash
+   git switch main && git pull
+   git switch -c feature/<krátký-popis>     # opravy: fix/<popis>
+   ```
+2. Commituješ a pushuješ do své větve (`git push -u origin feature/<krátký-popis>`).
+3. Otevřeš pull request do `main`. Počkáš, až CI zezelená a Yura PR schválí.
+4. PR mergneš sám tlačítkem **Merge pull request**. Větev se po mergi sama smaže.
+5. Po mergi se `main` sám nasadí na server (viz [Nasazení](#nasazení)).
+
+Pravidla:
+
+- Do `main` se nepushuje napřímo, jen přes PR. Bez zeleného CI a bez schválení nejde PR mergnout.
+- Když je tvoje větev pozadu za `main`, aktualizuj ji: `git pull origin main` (nebo tlačítko **Update branch** v PR).
+- Žádné sdílené větve typu `dev/backend` nebo `dev/frontend`: každý PR jde rovnou do `main`.
 
 ## CI
 
@@ -429,6 +599,7 @@ Nastavení serveru je v `~/assetStore/.env`. Vzor je `.env.example`, samotný `.
 | `MAX_UPLOAD_MB` | největší povolená velikost nahrávaného souboru v MB, výchozí 100 |
 | `MAX_STORAGE_GB` | limit pro všechny soubory dohromady v GB, výchozí 5 |
 | `WRITE_KEY` | společný klíč týmu pro nahrávání, úpravy a mazání; prázdné = zápis otevřený |
+| `INTERNAL_KEY` | společný klíč služeb pro volání `/internal/...`; prázdné = bez kontroly. `openssl rand -hex 32` |
 
 Nový server se poprvé připraví skriptem `deploy/setup-server.sh` (Docker, swap, naklonování repozitáře). Instance
 navíc potřebuje IAM roli s přístupem k bucketu.

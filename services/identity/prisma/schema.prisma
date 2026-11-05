@@ -1,4 +1,4 @@
-// Database schema of the identity service (its own database: identity). No models yet.
+// Database schema of the identity service (its own database: identity).
 // After a change: `npm run db:migrate -- --name <what-changed>` creates a migration in prisma/migrations
 // and regenerates the client in src/generated/prisma.
 
@@ -10,4 +10,61 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Status {
+  ACTIVE
+  SUSPENDED
+}
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  username     String    @unique @db.VarChar(50)
+  email        String    @unique @db.VarChar(254)
+  passwordHash String    @map("password_hash") @db.VarChar(255)
+  role         Role      @default(USER)
+  status       Status    @default(ACTIVE)
+  sessions     Session[]
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@map("user_account")
+}
+
+// One login on one device. Only the SHA-256 hash of the refresh token is stored.
+model Session {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokenHash String    @unique @map("refresh_token_hash") @db.VarChar(255)
+  createdAt        DateTime  @default(now()) @map("created_at")
+  expiresAt        DateTime  @map("expires_at")
+  revokedAt        DateTime? @map("revoked_at")
+
+  @@index([userId])
+  @@map("session")
+}
+
+// Audit log (README, Audit log): who did what to which object and when. Each service keeps its own table with the
+// same columns. Rows are only ever added: never updated or deleted.
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  // Empty until the service knows the logged-in user (the token check is not in packages/shared yet).
+  actorId    String?  @map("actor_id") @db.Uuid
+  action     String   @db.VarChar(30)
+  objectType String   @map("object_type") @db.VarChar(20)
+  objectId   String   @map("object_id") @db.Uuid
+  // Only for assetUpdated (catalog); null here.
+  changes    Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([objectType, objectId])
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("audit_log")
 }

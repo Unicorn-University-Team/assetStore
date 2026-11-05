@@ -5,7 +5,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 echo "Deploying $(git log --oneline -1)"
-docker compose up -d --build --remove-orphans </dev/null
+# One image at a time: building all services in parallel needs more memory than the server has.
+for image in identity catalog community caddy; do
+  docker compose build "$image" </dev/null
+done
+docker compose up -d --remove-orphans </dev/null
 
 SERVICES="identity catalog community"
 # Prints the services that are not healthy (yet).
