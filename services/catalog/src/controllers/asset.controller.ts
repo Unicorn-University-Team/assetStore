@@ -9,7 +9,8 @@ import { toAssetView } from '../views/asset.view';
 
 type IdParams = { id: string };
 
-const PAGE_SIZE = 20;
+const DEFAULT_PAGE_SIZE = 20;
+const MAX_PAGE_SIZE = 100;
 const STORAGE_LIMIT_BYTES = env.maxStorageGb * 1024 ** 3;
 
 function storageFull(): HttpError {
@@ -38,6 +39,26 @@ function readType(value: unknown): AssetType {
   return type;
 }
 
+// asset/list search by name: optional, may be empty (unlike readName for create and update).
+function readSearchName(value: unknown): string {
+  if (value === undefined) return '';
+  if (typeof value !== 'string') throw new HttpError(400, '"name" must be a string');
+  if (value.trim().length > 100) throw new HttpError(400, '"name" must be at most 100 characters');
+  return value.trim();
+}
+
+// Whole number from the query string (always a string there, or an array if the parameter is repeated).
+// max = null means no upper limit.
+function readInteger(field: string, value: unknown, min: number, max: number | null, fallback: number): number {
+  if (value === undefined) return fallback;
+  const number = typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : NaN;
+  if (!Number.isSafeInteger(number) || number < min || (max !== null && number > max)) {
+    const range = max === null ? `>= ${min}` : `from ${min} to ${max}`;
+    throw new HttpError(400, `"${field}" must be an integer ${range}`);
+  }
+  return number;
+}
+
 // Invalid ids are reported as "not found" instead of reaching the database as a malformed uuid.
 async function findAsset(id: string): Promise<Asset> {
   const asset = UUID.test(id) ? await AssetModel.findById(id) : null;
@@ -49,9 +70,9 @@ export const AssetController = {
   async list(req: Request, res: Response) {
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
     const page = Math.max(1, Math.floor(Number(req.query.page)) || 1);
-    const { items, total } = await AssetModel.findPage({ name: search, pageIndex: page - 1, pageSize: PAGE_SIZE });
+    const { items, total } = await AssetModel.findPage({ name: search, pageIndex: page - 1, pageSize: DEFAULT_PAGE_SIZE });
 
-    res.json({ items: items.map(toAssetView), page, pageSize: PAGE_SIZE, total });
+    res.json({ items: items.map(toAssetView), page, pageSize: DEFAULT_PAGE_SIZE, total });
   },
 
   async getById(req: Request<IdParams>, res: Response) {
