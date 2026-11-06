@@ -68,11 +68,12 @@ async function findAsset(id: string): Promise<Asset> {
 
 export const AssetController = {
   async list(req: Request, res: Response) {
-    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
-    const page = Math.max(1, Math.floor(Number(req.query.page)) || 1);
-    const { items, total } = await AssetModel.findPage({ name: search, pageIndex: page - 1, pageSize: DEFAULT_PAGE_SIZE });
+    const search = readSearchName(req.query.name);
+    const pageIndex = readInteger('pageIndex', req.query.pageIndex, 0, null, 0);
+    const pageSize = readInteger('pageSize', req.query.pageSize, 1, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE);
+    const { items, total } = await AssetModel.findPage({ name: search, pageIndex, pageSize });
 
-    res.json({ items: items.map(toAssetView), page, pageSize: DEFAULT_PAGE_SIZE, total });
+    res.json({ itemList: items.map(toAssetView), pageInfo: { pageIndex, pageSize, total } });
   },
 
   async getById(req: Request<IdParams>, res: Response) {
