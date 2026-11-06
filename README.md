@@ -275,7 +275,7 @@ s touto zprávou.
 
 ```bash
 curl -F name='Meč' -F type=3d -F description='Low poly' -F file=@sword.glb http://localhost:3002/api/assets
-curl 'http://localhost:3002/api/assets?search=meč'
+curl 'http://localhost:3002/api/assets?name=meč&pageIndex=0&pageSize=20'
 curl -OJ http://localhost:3002/api/assets/<id>/download     # uloží soubor pod původním jménem
 curl -X DELETE http://localhost:3002/api/assets/<id>
 ```
@@ -476,24 +476,31 @@ Zatím má endpointy jen **catalog**; identity a community jsou připravené pr�
 | Metoda | Cesta | Co dělá |
 |---|---|---|
 | `GET` | `/api/health/<služba>` | stav služby `identity`, `catalog` nebo `community`: `{ service, status, database }` (catalog i `storage`), při chybě 503 |
-| `GET` | `/api/assets?search=&page=` | seznam, hledání v názvu bez ohledu na velikost písmen, 20 na stránku: `{ items, page, pageSize, total }` |
+| `GET` | `/api/assets?name=&pageIndex=&pageSize=` | seznam od nejnovějších, hledání v názvu bez ohledu na velikost písmen; stránky od 0, `pageSize` 1–100 (výchozí 20), jinak 400: `{ itemList, pageInfo: { pageIndex, pageSize, total } }` |
 | `GET` | `/api/assets/:id` | jeden asset |
 | `POST` | `/api/assets` | nahrání, `multipart/form-data`: `name`, `description`, `type`, `file`; potřebuje `X-Write-Key` |
 | `PUT` | `/api/assets/:id` | JSON `{ name, description }`, soubor se nemění; potřebuje `X-Write-Key` |
 | `DELETE` | `/api/assets/:id` | smaže záznam i soubor; potřebuje `X-Write-Key` |
 | `GET` | `/api/assets/:id/download` | stažení souboru, `downloadCount` + 1 |
 
-Asset v odpovědi (`services/catalog/src/views/asset.view.ts`):
+Asset v odpovědi (`services/catalog/src/views/asset.view.ts`). `ownerId`, `ownerName`, `previewUrl` a `averageRating`
+jsou zatím `null`, `tagList` je `[]` a `reviewCount` je 0, dokud nejsou vlastníci, tagy, náhledy a recenze:
 
 ```json
 {
   "id": "1f628f53-d68c-47d0-b147-0f7b0386ad43",
+  "ownerId": null,
+  "ownerName": null,
   "name": "Medieval sword",
   "description": "Low poly",
   "type": "3d",
+  "tagList": [],
   "fileName": "sword.glb",
   "fileSize": 300000,
+  "previewUrl": null,
   "downloadCount": 0,
+  "averageRating": null,
+  "reviewCount": 0,
   "createdAt": "2026-10-21T21:38:54.677Z",
   "updatedAt": "2026-10-21T21:38:54.677Z"
 }
