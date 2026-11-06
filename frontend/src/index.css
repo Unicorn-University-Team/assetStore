@@ -1,0 +1,2 @@
+html { min-width: 320px; scroll-behavior: smooth; }
+::selection { color: #fff; background: #3355e0; }

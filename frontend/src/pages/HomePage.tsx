@@ -1,80 +1,55 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { API_URL, apiGet } from '../api/client'
-import AssetsDemo from '../components/AssetsDemo'
+import { Link } from 'react-router-dom'
+import { listAssets, type Asset } from '../api/assets'
+import AssetGrid from '../components/AssetGrid'
+import InlineError from '../components/InlineError'
 
-const SERVICES = ['identity', 'catalog', 'community'] as const
-type Service = (typeof SERVICES)[number]
-
-type Health = { service: string; status: string; database?: string; storage?: string }
-
-type ServiceState =
-  | { kind: 'loading' }
-  | { kind: 'ok'; health: Health; ms: number }
-  | { kind: 'error'; message: string }
-
-const LOADING: Record<Service, ServiceState> = {
-  identity: { kind: 'loading' },
-  catalog: { kind: 'loading' },
-  community: { kind: 'loading' },
-}
+const TYPES = [
+  { id: '2d', name: '2D', icon: '▧', tint: 'lavender' },
+  { id: '3d', name: '3D', icon: '◇', tint: 'blue' },
+  { id: 'map', name: 'Maps', icon: '⌖', tint: 'green' },
+  { id: 'sound', name: 'Sounds', icon: '♫', tint: 'orange' },
+  { id: 'environment', name: 'Environments', icon: '◌', tint: 'pink' },
+]
 
 export default function HomePage() {
-  const navigate = useNavigate()
-  const [services, setServices] = useState<Record<Service, ServiceState>>(LOADING)
+  const [assets, setAssets] = useState<Asset[]>([])
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const controller = new AbortController()
-
-    for (const service of SERVICES) {
-      const started = performance.now()
-      const update = (state: ServiceState) => setServices((current) => ({ ...current, [service]: state }))
-
-      apiGet<Health>(`/health/${service}`, controller.signal)
-        .then((health) => update({ kind: 'ok', health, ms: Math.round(performance.now() - started) }))
-        .catch((error: unknown) => {
-          if (controller.signal.aborted) return
-          update({ kind: 'error', message: error instanceof Error ? error.message : String(error) })
-        })
-    }
-
+    listAssets('', 1, controller.signal)
+      .then((page) => setAssets(page.items.slice(0, 4)))
+      .catch((cause: unknown) => {
+        if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Could not load assets.')
+      })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [])
 
   return (
-    <main className="page">
-      <h1>Page 1 - Main (Asset Store Catalog)</h1>
-      <p className="muted">Landing page with basic layout and navigation.</p>
-
-      <div style={{ marginBottom: '1.5rem' }}>
-        <button type="button" onClick={() => navigate('/asset-mockup')}>
-          Mockup Asset
-        </button>
-      </div>
-
-      <section className="card">
-        <h2>Backend services</h2>
-        {SERVICES.map((service) => {
-          const state = services[service]
-          return (
-            <p key={service} className={state.kind === 'ok' ? 'ok' : state.kind === 'error' ? 'error' : 'muted'}>
-              ● <strong>{service}</strong>
-              {state.kind === 'loading' && ': checking…'}
-              {state.kind === 'ok' && (
-                <>
-                  : <code>{JSON.stringify(state.health)}</code> in {state.ms} ms
-                </>
-              )}
-              {state.kind === 'error' && `: not reachable (${state.message})`}
-            </p>
-          )
-        })}
-        <p className="muted small">
-          GET <code>{API_URL}/health/&lt;service&gt;</code>
-        </p>
+    <main>
+      <section className="hero">
+        <div className="hero-copy">
+          <p className="eyebrow"><span className="eyebrow-dot" /> Made by game developers</p>
+          <h1>Free assets<br />for your next game<span className="period">.</span></h1>
+          <p className="hero-lede">2D and 3D models, maps, sounds and environments, published by game developers and rated by the people who used them.</p>
+          <div className="hero-actions"><Link className="button button-primary" to="/catalog">Browse the catalog <span>↗</span></Link><Link className="button button-secondary" to="/login">Publish yours</Link></div>
+          <div className="hero-proof"><span>✳ Free to download, no account needed</span><span>✳ Ratings from real users</span></div>
+        </div>
+        <div className="hero-art" aria-hidden="true"><div className="art-sun" /><div className="art-orbit orbit-one" /><div className="art-orbit orbit-two" /><div className="art-cube"><i /><i /><i /></div><span className="art-label label-one">3D · MODEL</span><span className="art-label label-two">READY TO PLAY</span><span className="art-star">✳</span></div>
       </section>
-
-      <AssetsDemo />
+      <section className="trust-strip"><div><strong>Free</strong><span>to download</span></div><div><strong>Rated</strong><span>by developers who used them</span></div><div><strong>Organized</strong><span>into collections per game</span></div><div><strong>Reviewed</strong><span>reports checked by admins</span></div></section>
+      <section className="section content-width">
+        <div className="section-heading"><div><p className="eyebrow">Find your next building block</p><h2>Browse by type</h2></div><Link className="text-link" to="/catalog">All assets <span>↗</span></Link></div>
+        <div className="type-grid">{TYPES.map((type, index) => <Link className={`type-card tint-${type.tint}`} key={type.id} to={`/catalog?type=${type.id}`}><span className="type-count">0{index + 1}</span><span className="type-symbol">{type.icon}</span><strong>{type.name}</strong><span className="type-arrow">↗</span></Link>)}</div>
+      </section>
+      <section className="section content-width latest-section">
+        <div className="section-heading"><div><p className="eyebrow">Fresh from the community</p><h2>Recently added</h2></div><Link className="text-link" to="/catalog">Explore the catalog <span>↗</span></Link></div>
+        {error ? <InlineError message={error} /> : loading ? <div className="state-box">Loading assets…</div> : assets.length ? <AssetGrid assets={assets} /> : <div className="empty-home"><span>✳</span><p>New assets are on their way.</p><Link className="text-link" to="/catalog">Browse all assets ↗</Link></div>}
+      </section>
+      <section className="cta-band"><div><p className="eyebrow">Made something useful?</p><h2>Your next player<br />is looking for it.</h2></div><Link className="button button-light" to="/login">Share an asset <span>↗</span></Link><span className="cta-flower" aria-hidden="true">✳</span></section>
     </main>
   )
 }
