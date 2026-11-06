@@ -15,5 +15,8 @@
     "@types/express": "^5.0.6",
     "@types/node": "^24.0.0",
     "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "jose": "^6.2.15"
   }
 }

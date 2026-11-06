@@ -1,5 +1,5 @@
 import { HttpError } from "@assetstore/shared";
-import { importPKCS8, importSPKI, jwtVerify, SignJWT } from "jose";
+import { importPKCS8, importSPKI, SignJWT } from "jose";
 import { env } from "../config/env";
 
 // Keys come from env (base64 of the PEM files) and are imported once, on first use.
@@ -15,12 +15,18 @@ function decodePem(base64: string, name: string): string {
 }
 
 export function loadPrivateKey() {
-  privateKey ??= importPKCS8(decodePem(env.jwtPrivateKey, "JWT_PRIVATE_KEY"), "RS256");
+  privateKey ??= importPKCS8(
+    decodePem(env.jwtPrivateKey, "JWT_PRIVATE_KEY"),
+    "RS256",
+  );
   return privateKey;
 }
 
 export function loadPublicKey() {
-  publicKey ??= importSPKI(decodePem(env.jwtPublicKey, "JWT_PUBLIC_KEY"), "RS256");
+  publicKey ??= importSPKI(
+    decodePem(env.jwtPublicKey, "JWT_PUBLIC_KEY"),
+    "RS256",
+  );
   return publicKey;
 }
 
@@ -43,18 +49,9 @@ export async function signAccessToken(
       alg: "RS256",
     })
     .setSubject(userId)
-    .setIssuedAt() // автоматически ставит актуальное время
+    .setIssuedAt()
     .setExpirationTime(accessTokenExpiresAt)
     .sign(await loadPrivateKey());
 
   return token;
-}
-
-//проверка цифровой подписи,срок действия, но не гарантия, что внутри JWT все правильно
-export async function verifyAccessToken(token: string) {
-  const result = await jwtVerify(token, await loadPublicKey(), {
-    algorithms: ["RS256"],
-  });
-
-  return result.payload;
 }

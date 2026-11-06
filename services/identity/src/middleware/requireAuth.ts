@@ -1,8 +1,9 @@
 import type { Request, Response, NextFunction } from "express";
-import { verifyAccessToken } from "../auth/jwt";
+import { loadPublicKey } from "../auth/jwt";
+import { verifyAccessToken } from "@assetstore/shared";
+
 import { errors } from "jose";
 
-//проверка того, что внутри JWT все правильно
 export async function requireAuth(
   req: Request,
   res: Response,
@@ -15,7 +16,7 @@ export async function requireAuth(
   }
 
   try {
-    const payload = await verifyAccessToken(token);
+    const payload = await verifyAccessToken(token, await loadPublicKey());
     const userId = payload.sub;
 
     if (
