@@ -1,5 +1,31 @@
+import { useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { useAuth } from '../auth/auth-context'
 import SearchBar from '../components/SearchBar'
+
+function HeaderAccount() {
+  const { user, status, logout } = useAuth()
+  const [busy, setBusy] = useState(false)
+
+  async function onLogout() {
+    setBusy(true)
+    try {
+      await logout()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (status === 'loading') return <span className="header-account" />
+  if (!user) return <Link className="header-login" to="/login">Log in</Link>
+
+  return (
+    <div className="header-account">
+      <span className="header-username">{user.username}</span>
+      <button className="header-login" type="button" onClick={() => { void onLogout() }} disabled={busy}>Log out</button>
+    </div>
+  )
+}
 
 function SiteHeader() {
   const navigate = useNavigate()
@@ -19,7 +45,7 @@ function SiteHeader() {
         {/* key: a new search in the URL (link, back button) starts the field over with that value */}
         <SearchBar key={search} value={search} onSearch={searchAssets} />
         <Link className="header-publish" to="/login">Publish an asset</Link>
-        <Link className="header-login" to="/login">Log in</Link>
+        <HeaderAccount />
       </div>
     </header>
   )

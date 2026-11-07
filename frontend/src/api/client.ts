@@ -39,7 +39,36 @@ function isAbortError(error: unknown): boolean {
     : error instanceof Error && error.name === 'AbortError'
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+// Login and register 401s are wrong credentials, not an expired access token.
+// /auth/me is the session probe: a failed refresh means "logged out", not "send the visitor to /login".
+const REFRESH_EXEMPT = new Set(['/auth/login', '/auth/register', '/auth/logout', '/auth/refresh'])
+
+let refreshInFlight: Promise<boolean> | null = null
+let onSessionExpired = () => {
+  if (window.location.pathname !== '/login') window.location.assign('/login')
+}
+
+export function setSessionExpiredHandler(handler: () => void) {
+  onSessionExpired = handler
+}
+
+function refreshSession(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = fetch(`${API_URL}/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    })
+      .then((response) => response.ok)
+      .catch(() => false)
+      .finally(() => {
+        refreshInFlight = null
+      })
+  }
+  return refreshInFlight
+}
+
+async function request<T>(path: string, init: RequestInit = {}, retried = false): Promise<T> {
   const headers = new Headers(init.headers)
   if (!headers.has('Accept')) headers.set('Accept', 'application/json')
   if (init.body != null && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
@@ -54,7 +83,15 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new Error('Could not connect to the server. Check your connection and try again.')
   }
 
-  if (!response.ok) throw await responseError(response)
+  if (!response.ok) {
+    if (response.status === 401 && !retried && !REFRESH_EXEMPT.has(path)) {
+      const refreshed = await refreshSession()
+      if (refreshed) return request(path, init, true)
+      // The session probe failing is the logged-out state. Other 401s mean the session is gone.
+      if (path !== '/auth/me') onSessionExpired()
+    }
+    throw await responseError(response)
+  }
   if (response.status === 204) return undefined as T
 
   const body = await response.text()
@@ -71,8 +108,12 @@ export function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> {
   return request<T>(path, { signal })
 }
 
-export function apiPost<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
-  return request<T>(path, { method: 'POST', body: JSON.stringify(body), signal })
+export function apiPost<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+  return request<T>(path, {
+    method: 'POST',
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal,
+  })
 }
 
 export function apiPostForm<T>(path: string, form: FormData, headers?: HeadersInit): Promise<T> {

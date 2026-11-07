@@ -1,6 +1,7 @@
 import { useCallback, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { apiPost } from '../api/client'
+import { useAuth } from '../auth/auth-context'
 import ConfirmDialog from '../components/ConfirmDialog'
 import FormField from '../components/FormField'
 import InlineError from '../components/InlineError'
@@ -9,6 +10,7 @@ type AuthMode = 'login' | 'register'
 
 export default function AuthPage({ mode }: { mode: AuthMode }) {
   const navigate = useNavigate()
+  const { refreshUser } = useAuth()
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -32,8 +34,8 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
     event.preventDefault()
     setError('')
     const cleanEmail = email.trim()
-    if (isRegister && !username.trim()) { setError('Enter your name.'); return }
-    if (isRegister && username.trim().length > 50) { setError('Name must be 50 characters or fewer.'); return }
+    if (isRegister && !username.trim()) { setError('Enter a username.'); return }
+    if (isRegister && username.trim().length > 50) { setError('Username must be 50 characters or fewer.'); return }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) { setError('Enter a valid e-mail address.'); return }
     if (isRegister && password.length < 8) { setError('Password must be at least 8 characters.'); return }
     if (!isRegister && !password) { setError('Enter your password.'); return }
@@ -46,6 +48,7 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
       } else {
         await apiPost('/auth/login', { email: cleanEmail, password })
       }
+      await refreshUser()
       navigate('/catalog')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Something went wrong. Please try again.')
@@ -63,7 +66,7 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
           <div className="auth-switch"><span>Welcome to assetStore</span><div><button type="button" className={!isRegister ? 'active' : ''} onClick={() => leave('/login')}>Log in</button><button type="button" className={isRegister ? 'active' : ''} onClick={() => leave('/register')}>Create account</button></div></div>
           <p className="eyebrow">{isRegister ? 'Join the community' : 'Good to see you again'}</p><h2>{isRegister ? 'Create your account' : 'Welcome back'}</h2><p className="auth-subtitle">{isRegister ? 'New accounts get the user role.' : 'Log in to share and review game assets.'}</p>
           <form className="auth-form" onSubmit={submit} noValidate>
-            {isRegister && <FormField id="username" label="Name" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Your name" maxLength={50} required />}
+            {isRegister && <FormField id="username" label="Username" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Your username" maxLength={50} required />}
             <FormField id="email" label="E-mail" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" maxLength={254} required />
             <FormField id="password" label="Password" type="password" autoComplete={isRegister ? 'new-password' : 'current-password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={isRegister ? 'At least 8 characters' : 'Your password'} minLength={isRegister ? 8 : 1} required />
             {error && <InlineError message={error} />}
