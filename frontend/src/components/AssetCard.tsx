@@ -1,26 +1,40 @@
 import { Link } from 'react-router-dom'
 import type { Asset } from '../api/assets'
+import AssetTypeIcon from './AssetTypeIcon'
 
-const TYPE_NAMES: Record<string, string> = {
-  '2d': '2D', '3d': '3D', map: 'Maps', sound: 'Sounds', environment: 'Environments',
+const TYPE_LABELS: Record<string, string> = {
+  '2d': '2D', '3d': '3D', map: 'Map', sound: 'Sound', environment: 'Environment',
 }
-const GLYPHS = ['✳', '◇', '◉', '⌁', '✣']
 
-export default function AssetCard({ asset, index = 0 }: { asset: Asset; index?: number }) {
-  const typeName = TYPE_NAMES[asset.type] ?? asset.type
+function Rating({ average, count }: { average: number | null; count: number }) {
+  if (average == null) return <span className="asset-card-rating">No reviews yet</span>
+  const filled = Math.round(average)
   return (
-    <Link className="asset-card" to={`/assets/${encodeURIComponent(asset.id)}`} aria-label={`Open ${asset.name}`}>
-      <span className={`asset-cover cover-${index % 5}`}>
-        <span className="cover-type">{typeName}</span>
-        {asset.previewUrl
-          ? <img className="cover-preview" src={asset.previewUrl} alt="" loading="lazy" />
-          : <><span className="cover-glyph" aria-hidden="true">{GLYPHS[index % GLYPHS.length]}</span><span className="cover-name">{asset.name.slice(0, 1).toUpperCase()}</span></>}
-      </span>
+    <span className="asset-card-rating">
+      <span className="card-stars" aria-hidden="true">{'★'.repeat(filled)}<span className="star-empty">{'★'.repeat(5 - filled)}</span></span>
+      <span className="sr-only">Rated</span>
+      <strong>{average.toFixed(1)}</strong>
+      <span>({count}<span className="sr-only"> {count === 1 ? 'review' : 'reviews'}</span>)</span>
+    </span>
+  )
+}
+
+export default function AssetCard({ asset }: { asset: Asset }) {
+  return (
+    <Link className="asset-card" to={`/assets/${encodeURIComponent(asset.id)}`}>
+      <span className={`asset-cover cover-${asset.type}`} aria-hidden="true" />
       <span className="asset-card-body">
-        <span className="asset-card-type">{typeName}</span>
+        <span className="asset-card-type"><AssetTypeIcon type={asset.type} />{TYPE_LABELS[asset.type] ?? asset.type}</span>
         <strong className="asset-card-title">{asset.name}</strong>
-        <span className="asset-card-description">{asset.description || 'A free asset for your next project.'}</span>
-        <span className="asset-card-foot"><span className="rating-empty">{asset.averageRating == null ? 'No ratings yet' : `★ ${asset.averageRating.toFixed(1)} · ${asset.reviewCount}`}</span><span className="asset-price">Free <span>↗</span></span></span>
+        <Rating average={asset.averageRating} count={asset.reviewCount} />
+        <span className="asset-card-foot">
+          <span className="asset-card-author">{asset.ownerName ?? 'Unknown author'}</span>
+          <span className="asset-card-downloads">
+            <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 1.5 V8 M3 5.5 L6 8.5 L9 5.5 M1.5 10.5 H10.5" /></svg>
+            {asset.downloadCount.toLocaleString('en-US')}
+            <span className="sr-only"> downloads</span>
+          </span>
+        </span>
       </span>
     </Link>
   )
