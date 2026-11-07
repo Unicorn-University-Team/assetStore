@@ -1,12 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { startTransition, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getCurrentUser, logout as logoutRequest, type AuthUser } from '../api/auth'
 import { ApiError, setSessionExpiredHandler } from '../api/client'
-import { AuthContext, pauseAuthGuard, resumeAuthGuard, type AuthStatus } from './auth-context'
+import { AuthContext, type AuthStatus } from './auth-context'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
-  const location = useLocation()
   const [user, setUser] = useState<AuthUser | null>(null)
   const [status, setStatus] = useState<AuthStatus>('loading')
 
@@ -47,15 +46,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
   }, [navigate])
 
-  useEffect(() => {
-    if (location.pathname === '/') resumeAuthGuard()
-  }, [location.pathname])
-
   const logout = useCallback(async () => {
     await logoutRequest()
-    pauseAuthGuard()
-    setUser(null)
-    navigate('/', { replace: true })
+    // React Router changes the location inside a transition. Clearing the user in the same transition
+    // renders both together, so a protected page never sees "no user" and never redirects to /login.
+    startTransition(() => {
+      navigate('/', { replace: true })
+      setUser(null)
+    })
   }, [navigate])
 
   const value = useMemo(
