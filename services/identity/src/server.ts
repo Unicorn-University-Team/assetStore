@@ -1,6 +1,8 @@
-import { app } from './app';
-import { env } from './config/env';
+import { app } from "./app";
+import { env } from "./config/env";
 
 app.listen(env.port, () => {
-  console.log(`Identity service is running on http://localhost:${env.port} (${env.nodeEnv})`);
+  console.log(
+    `Identity service is running on http://localhost:${env.port} (${env.nodeEnv})`,
+  );
 });

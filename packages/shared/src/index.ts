@@ -6,3 +6,6 @@ export { HttpError } from './HttpError';
 export { notFound } from './notFound';
 export { callService, type CallServiceOptions } from './callService';
 export { INTERNAL_KEY_HEADER, requireInternalKey } from './internalKey';
+export { verifyAccessToken, type PublicKey } from './auth/jwt';
+export { requireAuth } from './auth/requireAuth';
+export { requireRole } from './auth/requireRole';
