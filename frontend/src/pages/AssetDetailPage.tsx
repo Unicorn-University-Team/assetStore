@@ -16,18 +16,20 @@ function formatSize(bytes: number) {
 
 export default function AssetDetailPage() {
   const { id = '' } = useParams()
-  const [asset, setAsset] = useState<Asset | null>(null)
-  const [error, setError] = useState('')
+  // The answer remembers its id: after a switch to another asset, the old one is not shown while the new one loads.
+  const [loaded, setLoaded] = useState<{ id: string; asset: Asset | null; error: string } | null>(null)
 
   useEffect(() => {
     const controller = new AbortController()
-    setAsset(null)
-    setError('')
     apiGet<Asset>(`/assets/${encodeURIComponent(id)}`, controller.signal)
-      .then(setAsset)
-      .catch((cause: unknown) => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Could not load this asset.') })
+      .then((asset) => setLoaded({ id, asset, error: '' }))
+      .catch((cause: unknown) => { if (!controller.signal.aborted) setLoaded({ id, asset: null, error: cause instanceof Error ? cause.message : 'Could not load this asset.' }) })
     return () => controller.abort()
   }, [id])
+
+  const current = loaded?.id === id ? loaded : null
+  const asset = current?.asset ?? null
+  const error = current?.error ?? ''
 
   if (error) return <main className="content-width"><div className="breadcrumbs"><Link to="/catalog">Catalog</Link><span>/</span><span>Asset</span></div><InlineError message={error} /></main>
   if (!asset) return <main className="content-width"><div className="state-box" role="status">Loading asset…</div></main>

@@ -15,22 +15,24 @@ export default function CatalogPage() {
   const search = params.get('search') ?? ''
   const type = params.get('type') ?? ''
   const page = Math.max(1, Number(params.get('page') ?? '1') || 1)
-  const [result, setResult] = useState<AssetPage | null>(null)
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(true)
+  // The answer remembers which search and page it is for; loading = it is not for the current ones yet.
+  const request = `${page}:${search}`
+  const [loaded, setLoaded] = useState<{ request: string; result: AssetPage | null; error: string } | null>(null)
 
   useEffect(() => {
     const controller = new AbortController()
-    setLoading(true)
-    setError('')
     listAssets(search, page, controller.signal)
-      .then(setResult)
+      .then((result) => setLoaded({ request, result, error: '' }))
       .catch((cause: unknown) => {
-        if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Could not load the catalog.')
+        if (!controller.signal.aborted) setLoaded({ request, result: null, error: cause instanceof Error ? cause.message : 'Could not load the catalog.' })
       })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [search, page])
+  }, [search, page, request])
+
+  const loading = loaded?.request !== request
+  // While the next page loads, the previous total stays in the header.
+  const result = loaded?.result ?? null
+  const error = loading ? '' : loaded.error
 
   const assets = useMemo(() => result?.items.filter((asset) => !type || asset.type === type) ?? [], [result, type])
 

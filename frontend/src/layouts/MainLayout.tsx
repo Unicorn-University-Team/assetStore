@@ -4,6 +4,7 @@ import SearchBar from '../components/SearchBar'
 function SiteHeader() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const search = searchParams.get('search') ?? ''
 
   function searchAssets(value: string) {
     navigate(value ? `/catalog?search=${encodeURIComponent(value)}` : '/catalog')
@@ -15,7 +16,8 @@ function SiteHeader() {
         <Link className="brand" to="/" aria-label="assetStore home">
           <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span><span>assetStore</span>
         </Link>
-        <SearchBar value={searchParams.get('search') ?? ''} onSearch={searchAssets} />
+        {/* key: a new search in the URL (link, back button) starts the field over with that value */}
+        <SearchBar key={search} value={search} onSearch={searchAssets} />
         <Link className="header-publish" to="/login">Publish an asset</Link>
         <Link className="header-login" to="/login">Log in</Link>
       </div>

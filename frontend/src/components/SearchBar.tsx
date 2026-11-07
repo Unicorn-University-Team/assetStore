@@ -1,8 +1,7 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 
 export default function SearchBar({ value, onSearch }: { value: string; onSearch: (value: string) => void }) {
   const [draft, setDraft] = useState(value)
-  useEffect(() => setDraft(value), [value])
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
