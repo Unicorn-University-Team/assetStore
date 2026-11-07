@@ -31,13 +31,13 @@ export default function AssetDetailPage() {
   const asset = current?.asset ?? null
   const error = current?.error ?? ''
 
-  if (error) return <main className="content-width"><div className="breadcrumbs"><Link to="/catalog">Catalog</Link><span>/</span><span>Asset</span></div><InlineError message={error} /></main>
+  if (error) return <main className="content-width"><div className="breadcrumbs"><Link to="/">Catalogue</Link><span>/</span><span>Asset</span></div><InlineError message={error} /></main>
   if (!asset) return <main className="content-width"><div className="state-box" role="status">Loading asset…</div></main>
 
   const typeName = TYPE_NAMES[asset.type] ?? asset.type
   return (
     <main className="content-width asset-detail-page">
-      <div className="breadcrumbs"><Link to="/">Home</Link><span>/</span><Link to="/catalog">{typeName}</Link><span>/</span><span>{asset.name}</span></div>
+      <div className="breadcrumbs"><Link to="/">Catalogue</Link><span>/</span><span>{asset.name}</span></div>
       <div className="asset-detail-layout">
         <section className="asset-main-column">
           <div className="detail-cover">

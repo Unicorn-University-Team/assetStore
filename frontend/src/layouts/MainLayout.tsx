@@ -33,7 +33,7 @@ function SiteHeader() {
   const search = searchParams.get('search') ?? ''
 
   function searchAssets(value: string) {
-    navigate(value ? `/catalog?search=${encodeURIComponent(value)}` : '/catalog')
+    navigate(value ? `/?search=${encodeURIComponent(value)}` : '/')
   }
 
   return (
@@ -56,7 +56,7 @@ function SiteFooter() {
     <footer className="site-footer">
       <Link className="brand footer-brand" to="/"><span className="brand-mark" aria-hidden="true"><i /><i /><i /></span><span>assetStore</span></Link>
       <span>Free assets for the games we make together.</span>
-      <Link className="text-link" to="/catalog">Browse catalog ↗</Link>
+      <Link className="text-link" to="/">Browse catalogue ↗</Link>
     </footer>
   )
 }

@@ -21,15 +21,15 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       // The same split of /api as deploy/Caddyfile does in production; keep both in sync.
-      // The first matching entry wins.
+      // The first matching entry wins. Patterns see the URL with its query string, hence [/?].
       proxy: {
         '/api/health/identity': health(identity),
         '/api/health/catalog': health(catalog),
         '/api/health/community': health(community),
-        '^/api/(auth|users)(/|$)': identity,
-        '^/api/assets/[^/]+/(reviews|reports)(/|$)': community,
-        '^/api/(reviews|collections|reports)(/|$)': community,
-        '^/api/(assets|tags)(/|$)': catalog,
+        '^/api/(auth|users)([/?]|$)': identity,
+        '^/api/assets/[^/]+/(reviews|reports)([/?]|$)': community,
+        '^/api/(reviews|collections|reports)([/?]|$)': community,
+        '^/api/(assets|tags)([/?]|$)': catalog,
       },
     },
   }

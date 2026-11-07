@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './App.css'
 import { AuthProvider } from './auth/AuthProvider'
 import { RequireAuth } from './auth/RequireAuth'
@@ -6,7 +6,6 @@ import MainLayout from './layouts/MainLayout'
 import AssetDetailPage from './pages/AssetDetailPage'
 import AuthPage from './pages/AuthPage'
 import CatalogPage from './pages/CatalogPage'
-import HomePage from './pages/HomePage'
 import MockupAssetPage from './pages/MockupAssetPage'
 
 function NotFoundPage() {
@@ -25,8 +24,8 @@ export default function App() {
       <AuthProvider>
         <Routes>
           <Route element={<MainLayout />}>
-            <Route index element={<HomePage />} />
-            <Route path="catalog" element={<CatalogPage />} />
+            <Route index element={<CatalogPage />} />
+            <Route path="catalog" element={<Navigate to="/" replace />} />
             <Route path="assets/:id" element={<AssetDetailPage />} />
             <Route path="login" element={<AuthPage mode="login" />} />
             <Route path="register" element={<AuthPage mode="register" />} />

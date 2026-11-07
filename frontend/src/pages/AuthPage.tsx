@@ -49,7 +49,7 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
         await apiPost('/auth/login', { email: cleanEmail, password })
       }
       await refreshUser()
-      navigate('/catalog')
+      navigate('/')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Something went wrong. Please try again.')
     } finally {
@@ -59,7 +59,7 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
 
   return (
     <main className="auth-page">
-      <div className="auth-top"><Link className="brand dark-brand" to="/" onClick={(event) => { event.preventDefault(); leave('/') }}><span className="brand-mark" aria-hidden="true"><i /><i /><i /></span><span>assetStore</span></Link><button className="back-link" type="button" onClick={() => leave('/catalog')}>← Back to the catalog</button></div>
+      <div className="auth-top"><Link className="brand dark-brand" to="/" onClick={(event) => { event.preventDefault(); leave('/') }}><span className="brand-mark" aria-hidden="true"><i /><i /><i /></span><span>assetStore</span></Link><button className="back-link" type="button" onClick={() => leave('/')}>← Back to the catalogue</button></div>
       <div className="auth-layout">
         <section className="auth-pitch"><p className="eyebrow">A home for game makers</p><h1>Share your<br />assets with<br /><span>the world.</span></h1><p>Downloading needs no account. With one you can publish your own models, maps and sounds, rate and review what you used, and keep collections for each game.</p><div className="auth-pitch-art" aria-hidden="true"><span>✳</span><i /><i /><i /></div></section>
         <section className="auth-form-wrap">
