@@ -23,13 +23,13 @@ export type AssetInput = Pick<Asset, 'name' | 'description' | 'type' | 'fileKey'
 export type AssetUpdate = Pick<Asset, 'name' | 'description'>;
 
 export const AssetModel = {
-  async findPage(options: { search: string; page: number; pageSize: number }) {
-    const where = options.search ? { name: { contains: options.search, mode: 'insensitive' as const } } : {};
+  async findPage(options: { name: string; pageIndex: number; pageSize: number }) {
+    const where = options.name ? { name: { contains: options.name, mode: 'insensitive' as const } } : {};
     const [items, total] = await prisma.$transaction([
       prisma.asset.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        skip: (options.page - 1) * options.pageSize,
+        skip: options.pageIndex * options.pageSize,
         take: options.pageSize,
       }),
       prisma.asset.count({ where }),
