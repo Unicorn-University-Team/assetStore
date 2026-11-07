@@ -10,8 +10,10 @@ export function requireAuth(loadPublicKey: () => Promise<PublicKey>) {
     if (!token || typeof token !== "string" || token.length === 0) {
       return res.status(401).json({ error: "Authentication required." });
     }
+    // Outside the try: a missing or broken key is a server problem (503 or 500), not a bad token.
+    const publicKey = await loadPublicKey();
     try {
-      const payload = await verifyAccessToken(token, await loadPublicKey());
+      const payload = await verifyAccessToken(token, publicKey);
       const userId = payload.sub;
 
       if (
@@ -34,13 +36,8 @@ export function requireAuth(loadPublicKey: () => Promise<PublicKey>) {
       res.locals.userId = userId;
       res.locals.role = role;
     } catch (error) {
-      if (
-        error instanceof errors.JWTExpired ||
-        error instanceof errors.JWSSignatureVerificationFailed ||
-        error instanceof errors.JWTInvalid ||
-        error instanceof errors.JWSInvalid ||
-        error instanceof errors.JOSEAlgNotAllowed
-      ) {
+      // Any jose error means the token itself is bad (expired, wrong signature, malformed, unsupported header...).
+      if (error instanceof errors.JOSEError) {
         return res.status(401).json({ error: "Invalid or expired token." });
       }
       return next(error); //отдает остальные ошибки стандартному обработчику
