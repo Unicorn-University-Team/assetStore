@@ -1,39 +1,20 @@
-import { useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { useAuth } from '../auth/auth-context'
 import SearchBar from '../components/SearchBar'
-
-function HeaderAccount() {
-  const { user, status, logout } = useAuth()
-  const [busy, setBusy] = useState(false)
-
-  async function onLogout() {
-    setBusy(true)
-    try {
-      await logout()
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  if (status === 'loading') return <span className="header-account" />
-  if (!user) return <Link className="header-login" to="/login">Log in</Link>
-
-  return (
-    <div className="header-account">
-      <span className="header-username">{user.username}</span>
-      <button className="header-login" type="button" onClick={() => { void onLogout() }} disabled={busy}>Log out</button>
-    </div>
-  )
-}
 
 function SiteHeader() {
   const navigate = useNavigate()
+  const { pathname } = useLocation()
   const [searchParams] = useSearchParams()
   const search = searchParams.get('search') ?? ''
 
   function searchAssets(value: string) {
-    navigate(value ? `/?search=${encodeURIComponent(value)}` : '/')
+    const next = new URLSearchParams(pathname === '/catalog' ? searchParams : undefined)
+    const trimmed = value.trim()
+    if (trimmed) next.set('search', trimmed)
+    else next.delete('search')
+    next.delete('page')
+    const query = next.toString()
+    navigate(query ? `/catalog?${query}` : '/catalog')
   }
 
   return (
@@ -45,7 +26,7 @@ function SiteHeader() {
         {/* key: a new search in the URL (link, back button) starts the field over with that value */}
         <SearchBar key={search} value={search} onSearch={searchAssets} />
         <Link className="header-publish" to="/login">Publish an asset</Link>
-        <HeaderAccount />
+        <Link className="header-login" to="/login">Log in</Link>
       </div>
     </header>
   )
@@ -56,7 +37,7 @@ function SiteFooter() {
     <footer className="site-footer">
       <Link className="brand footer-brand" to="/"><span className="brand-mark" aria-hidden="true"><i /><i /><i /></span><span>assetStore</span></Link>
       <span>Free assets for the games we make together.</span>
-      <Link className="text-link" to="/">Browse catalogue ↗</Link>
+      <Link className="text-link" to="/catalog">Browse catalog ↗</Link>
     </footer>
   )
 }
