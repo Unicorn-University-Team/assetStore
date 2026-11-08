@@ -483,6 +483,7 @@ připravená prázdná služba. Všechno se dá vyzkoušet v Postmanu, viz [Post
 | `PUT` | `/api/assets/:id` | JSON `{ name, description }`, soubor se nemění; potřebuje `X-Write-Key` |
 | `DELETE` | `/api/assets/:id` | smaže záznam i soubor; potřebuje `X-Write-Key` |
 | `GET` | `/api/assets/:id/download` | stažení souboru, `downloadCount` + 1 |
+| `GET` | `/api/tags?prefix=` | nápověda tagů a filtr (AM `tag/list`): nejvýš 10 tagů začínajících na `prefix` (bez ohledu na velikost písmen, nejvýš 50 znaků, jinak **400**), řazeno podle názvu: `{ itemList: [{ id, name }] }` |
 
 Asset v odpovědi (`services/catalog/src/views/asset.view.ts`). `ownerId`, `ownerName`, `previewUrl` a `averageRating`
 jsou zatím `null`, `tagList` je `[]` a `reviewCount` je 0, dokud nejsou vlastníci, tagy, náhledy a recenze:
