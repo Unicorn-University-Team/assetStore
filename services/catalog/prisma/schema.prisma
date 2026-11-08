@@ -29,6 +29,14 @@ model Asset {
   @@map("asset")
 }
 
+model Tag {
+  id   String @id @default(uuid()) @db.Uuid
+  // 1 to 50 characters: letters, digits and a hyphen, stored in lower case
+  name String @unique @db.VarChar(50)
+
+  @@map("tag")
+}
+
 // Audit log (README, Audit log): who did what to which object and when. Each service keeps its own table with the
 // same columns. Rows are only ever added: never updated or deleted.
 model AuditLog {

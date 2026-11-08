@@ -563,6 +563,47 @@
           }
         }
       ]
+    },
+    {
+      "name": "Tags",
+      "item": [
+        {
+          "name": "List",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tags?prefix=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tags"
+              ],
+              "query": [
+                {
+                  "key": "prefix",
+                  "value": "",
+                  "description": "Start of the tag name, at most 50 characters"
+                }
+              ]
+            },
+            "description": "At most 10 tags starting with the prefix, sorted by name."
+          }
+        }
+      ]
     }
   ]
 }
