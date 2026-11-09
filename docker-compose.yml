@@ -92,6 +92,8 @@ services:
       MAX_STORAGE_GB: ${MAX_STORAGE_GB:-5}
       WRITE_KEY: ${WRITE_KEY:-}
       INTERNAL_KEY: ${INTERNAL_KEY:-}
+      # Public key for checking access tokens (README, Přihlášení). Missing = writing answers 503.
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:-}
 
   community:
     <<: *service

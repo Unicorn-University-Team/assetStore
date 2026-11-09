@@ -16,4 +16,6 @@ export const env = {
   writeKey: process.env.WRITE_KEY ?? '',
   // Shared secret that other services send in X-Internal-Key on /internal routes. Empty = not checked.
   internalKey: process.env.INTERNAL_KEY ?? '',
+  // Public key from identity for checking access tokens (README, Přihlášení). Empty = writing answers 503.
+  jwtPublicKey: process.env.JWT_PUBLIC_KEY ?? '',
 };
