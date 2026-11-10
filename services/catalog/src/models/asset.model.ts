@@ -49,16 +49,16 @@ export const AssetModel = {
 
   // Creating, updating and deleting write an audit log entry in the same transaction:
   // if the entry cannot be written, the change is undone (README, Audit log, rule 1).
-  create(input: AssetInput): Promise<Asset> {
+  create(input: AssetInput, actorId: string): Promise<Asset> {
     return prisma.$transaction(async (tx) => {
       const asset = await tx.asset.create({ data: input });
-      await AuditLogModel.create(tx, { action: 'assetCreated', objectType: 'asset', objectId: asset.id });
+      await AuditLogModel.create(tx, { action: 'assetCreated', objectType: 'asset', objectId: asset.id, actorId });
       return asset;
     });
   },
 
   // An update that changes nothing is not logged.
-  update(id: string, input: AssetUpdate): Promise<Asset | null> {
+  update(id: string, input: AssetUpdate, actorId: string): Promise<Asset | null> {
     return prisma.$transaction(async (tx) => {
       const before = await tx.asset.findUnique({ where: { id } });
       if (!before) return null;
@@ -70,7 +70,7 @@ export const AssetModel = {
       const after = await tx.asset.findUniqueOrThrow({ where: { id } });
       const changes = diffFields(before, after, ['name', 'description']);
       if (Object.keys(changes).length > 0) {
-        await AuditLogModel.create(tx, { action: 'assetUpdated', objectType: 'asset', objectId: id, changes });
+        await AuditLogModel.create(tx, { action: 'assetUpdated', objectType: 'asset', objectId: id, changes, actorId });
       }
       return after;
     });
@@ -83,12 +83,12 @@ export const AssetModel = {
 
   // Returns the deleted asset, so the caller can remove its file from S3 after the transaction:
   // if the audit log fails, the row comes back and the file must still be there.
-  remove(id: string): Promise<Asset | null> {
+  remove(id: string, actorId: string): Promise<Asset | null> {
     return prisma.$transaction(async (tx) => {
       const asset = await tx.asset.findUnique({ where: { id } });
       if (!asset) return null;
       await tx.asset.delete({ where: { id } });
-      await AuditLogModel.create(tx, { action: 'assetDeleted', objectType: 'asset', objectId: id });
+      await AuditLogModel.create(tx, { action: 'assetDeleted', objectType: 'asset', objectId: id, actorId });
       return asset;
     });
   },

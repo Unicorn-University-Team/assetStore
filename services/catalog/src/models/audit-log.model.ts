@@ -13,8 +13,7 @@ export type AuditLogEntry = {
   action: AuditAction;
   objectType: 'asset';
   objectId: string;
-  // Who did it; null until catalog knows the logged-in user.
-  actorId?: string | null;
+  actorId: string;
   changes?: AuditChanges;
 };
 
@@ -41,7 +40,7 @@ export const AuditLogModel = {
           action: entry.action,
           objectType: entry.objectType,
           objectId: entry.objectId,
-          actorId: entry.actorId ?? null,
+          actorId: entry.actorId,
           changes: entry.changes,
         },
       });
