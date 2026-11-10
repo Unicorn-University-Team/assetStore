@@ -155,7 +155,8 @@ V `services/catalog/.env` navíc:
 - `S3_BUCKET=assetstore-files-tym1-dev`: vývojový bucket, soubory z vývoje se tak nemíchají se soubory na webu.
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`: přístupový klíč k vývojovému bucketu, dá ho Yura.
   Klíč neposílat do skupinových chatů a nikdy necommitovat.
-- `WRITE_KEY` nechat lokálně prázdný, pak je zápis otevřený (viz [Ochrana zápisu](#ochrana-zápisu)).
+- `JWT_PUBLIC_KEY`: stejná hodnota jako v `services/identity/.env`. Bez něj nahrávání, úpravy a mazání vrací **503**
+  (viz [Ochrana zápisu](#ochrana-zápisu)).
 
 Kontrola: `curl http://localhost:3002/health` vrátí `{"service":"catalog","status":"ok","database":"ok","storage":"ok"}`.
 Když je `storage` `error`, chybí nebo nesedí `S3_BUCKET` nebo AWS klíče.
@@ -261,12 +262,13 @@ nepovede, chyba se zapíše do logu služby catalog a záznam zůstane smazaný.
 
 | Kód | Kdy |
 |---|---|
-| 401 | chybí nebo nesedí klíč pro zápis (`X-Write-Key`) |
+| 401 | uživatel není přihlášený, token je neplatný nebo prošlý |
 | 400 | chybí `name` nebo `file`, neplatný `type`, nepovolená přípona, požadavek není `multipart/form-data` |
 | 404 | asset neexistuje (i neplatné id) |
 | 413 | soubor je větší než `MAX_UPLOAD_MB` |
 | 502 | soubor se nepodařilo uložit do S3 |
 | 507 | všechny soubory dohromady by překročily `MAX_STORAGE_GB` |
+| 503 | catalog nemá `JWT_PUBLIC_KEY`, takže nejde ověřit přihlášení |
 
 Chybová odpověď je vždy JSON `{ "error": "..." }`. Funkce ve `frontend/src/api/client.ts` z něj udělají `Error`
 s touto zprávou.
@@ -274,13 +276,13 @@ s touto zprávou.
 ### Vyzkoušení přes curl
 
 ```bash
-curl -F name='Meč' -F type=3d -F description='Low poly' -F file=@sword.glb http://localhost:3002/api/assets
+curl -b cookies.txt -F name='Meč' -F type=3d -F description='Low poly' -F file=@sword.glb http://localhost:3002/api/assets
 curl 'http://localhost:3002/api/assets?name=meč&pageIndex=0&pageSize=20'
 curl -OJ http://localhost:3002/api/assets/<id>/download     # uloží soubor pod původním jménem
-curl -X DELETE http://localhost:3002/api/assets/<id>
+curl -b cookies.txt -X DELETE http://localhost:3002/api/assets/<id>
 ```
 
-Lokálně bez `WRITE_KEY` klíč není potřeba; na serveru se přidá `-H 'X-Write-Key: <klíč>'`.
+Nahrání a smazání potřebují přihlášení: `cookies.txt` vznikne při přihlášení, viz [Ochrana zápisu](#ochrana-zápisu).
 
 ### Přístup k S3
 
@@ -291,8 +293,8 @@ Lokálně bez `WRITE_KEY` klíč není potřeba; na serveru se přidá `-H 'X-Wr
 
 ### Co zatím chybí
 
-- Vlastník assetu (`owner_id`) a kontrola práv: přijde s přihlášením (AUTH-1 až AUTH-3). Do té doby zápis
-  chrání společný klíč, viz [Ochrana zápisu](#ochrana-zápisu).
+- Vlastník assetu (`owner_id`) a kontrola práv. Zápis už vyžaduje přihlášení, ale každý přihlášený zatím může
+  upravit nebo smazat i cizí asset, viz [Ochrana zápisu](#ochrana-zápisu).
 - Tagy, recenze, kolekce.
 
 ## Přihlášení
@@ -308,7 +310,7 @@ Registraci a přihlášení dělá služba identity:
 | `POST` | `/api/auth/logout` | zruší session a smaže obě cookies |
 
 - **Access token** je JWT podepsaný RS256: `sub` = id uživatele, `role` = `USER` nebo `ADMIN`, platí 15 minut.
-  Identity podepisuje soukromým klíčem, ostatní služby budou ověřovat veřejným.
+  Identity podepisuje soukromým klíčem, ostatní služby ověřují veřejným (zatím catalog).
 - **Refresh token** platí 30 dní. V databázi je jen jeho hash a při každém refresh se mění za nový.
 - Oba tokeny jsou httpOnly cookies, ne hlavička `Authorization` (tu používá heslo na celý web, `SITE_AUTH`).
   Na serveru (`NODE_ENV=production`) se posílají jen přes HTTPS.
@@ -332,28 +334,27 @@ opakovaně, existující účty nemění.
 
 ## Ochrana zápisu
 
-Dokud nemáme registraci a přihlášení, nikdo cizí nesmí nahrávat, upravovat ani mazat assety. Proto platí dvě pojistky:
+`POST`, `PUT` a `DELETE` na `/api/assets` smí jen přihlášený uživatel. Catalog ověří access token z cookie
+`access_token` veřejným klíčem (`JWT_PUBLIC_KEY`, stejná hodnota jako v identity) a id uživatele zapíše do audit
+logu jako `actorId`. Platí dvě pojistky:
 
-1. **Klíč pro zápis.** `POST`, `PUT` a `DELETE` na `/api/assets` vyžadují hlavičku `X-Write-Key` se společným klíčem
-   týmu (`WRITE_KEY` v `.env` na serveru). Bez klíče nebo se špatným klíčem je odpověď **401** a soubor se ani
-   nezačne nahrávat. Prohlížení, hledání a stahování klíč nepotřebují. Když `WRITE_KEY` není nastavený (lokální
-   vývoj), je zápis otevřený.
+1. **Přihlášení.** Bez cookie nebo s neplatným či prošlým tokenem je odpověď **401** a soubor se ani nezačne
+   nahrávat. Když catalog nemá `JWT_PUBLIC_KEY`, odpoví **503**. Prohlížení, hledání a stahování přihlášení
+   nepotřebují.
 2. **Limit celkové velikosti** `MAX_STORAGE_GB` (výchozí 5 GB). Když by všechny soubory dohromady limit překročily,
-   nahrání skončí **507** a soubor se v S3 nenechá. I kdyby klíč unikl, bucket nejde zaplnit donekonečna.
+   nahrání skončí **507** a soubor se v S3 nenechá. Bucket tak nejde zaplnit donekonečna, ani když se přihlásí
+   někdo, kdo nemá.
 
-Klíč dá Yura, posílat ho jen soukromě. Na testovací stránce se zadává do pole „Write key“ a prohlížeč si ho
-pamatuje. Z kódu se posílá takto:
-
-```ts
-uploadAsset(asset, writeKey)    // frontend/src/api/assets.ts, přidá hlavičku X-Write-Key
-```
+Prohlížeč posílá cookie sám, stačí se přihlásit na stejném webu. Postman taky (viz [Postman](#postman)). Přes curl
+se cookie uloží při přihlášení a pak se přikládá:
 
 ```bash
-curl -H 'X-Write-Key: <klíč>' -F name='Meč' -F type=3d -F file=@sword.glb https://3-125-15-78.sslip.io/api/assets
+curl -c cookies.txt -H 'Content-Type: application/json' -d '{"email":"admin@example.com","password":"<heslo>"}' http://localhost:3001/api/auth/login
+curl -b cookies.txt -F name='Meč' -F type=3d -F file=@sword.glb http://localhost:3002/api/assets
 ```
 
-Klíč je záměrně v hlavičce `X-Write-Key`, ne v `Authorization`: tu používá heslo na celý web (`SITE_AUTH`).
-Až bude přihlášení, nahradí klíč kontrola uživatele a jeho role.
+**Zatím chybí kontrola vlastníka:** každý přihlášený může upravit nebo smazat i cizí asset (`Asset` nemá `ownerId`).
+Registrace je otevřená, na serveru cizí lidi drží venku `SITE_AUTH`.
 
 ## Komunikace mezi službami
 
@@ -424,7 +425,7 @@ třech `schema.prisma` stejný a tak má zůstat.
 
 Sloupce: `actorId` (kdo akci provedl), `action`, `objectType` (`asset`, `report`, `user`), `objectId`, `changes`
 a `createdAt`. `changes` je jen u `assetUpdated`, obsahuje změněná pole: `{ "name": { "old": "…", "new": "…" } }`.
-`actorId` je zatím prázdný, protože služby ještě neznají přihlášeného uživatele.
+V catalogu je `actorId` id přihlášeného uživatele (`sub` z access tokenu); starší záznamy ho mají prázdný.
 
 Pravidla:
 
@@ -479,9 +480,9 @@ připravená prázdná služba. Všechno se dá vyzkoušet v Postmanu, viz [Post
 | `GET` | `/api/health/<služba>` | stav služby `identity`, `catalog` nebo `community`: `{ service, status, database }` (catalog i `storage`), při chybě 503 |
 | `GET` | `/api/assets?name=&pageIndex=&pageSize=` | seznam od nejnovějších, hledání v názvu bez ohledu na velikost písmen; stránky od 0, `pageSize` 1–100 (výchozí 20), jinak 400: `{ itemList, pageInfo: { pageIndex, pageSize, total } }` |
 | `GET` | `/api/assets/:id` | jeden asset |
-| `POST` | `/api/assets` | nahrání, `multipart/form-data`: `name`, `description`, `type`, `file`; potřebuje `X-Write-Key` |
-| `PUT` | `/api/assets/:id` | JSON `{ name, description }`, soubor se nemění; potřebuje `X-Write-Key` |
-| `DELETE` | `/api/assets/:id` | smaže záznam i soubor; potřebuje `X-Write-Key` |
+| `POST` | `/api/assets` | nahrání, `multipart/form-data`: `name`, `description`, `type`, `file`; potřebuje přihlášení |
+| `PUT` | `/api/assets/:id` | JSON `{ name, description }`, soubor se nemění; potřebuje přihlášení |
+| `DELETE` | `/api/assets/:id` | smaže záznam i soubor; potřebuje přihlášení |
 | `GET` | `/api/assets/:id/download` | stažení souboru, `downloadCount` + 1 |
 
 Asset v odpovědi (`services/catalog/src/views/asset.view.ts`). `ownerId`, `ownerName`, `previewUrl` a `averageRating`
@@ -521,9 +522,8 @@ Kolekce se všemi endpointy je v `postman/AssetStore.postman_collection.json`. V
 
 **Prostředí (environments):** importovat i `postman/AssetStore-Local.postman_environment.json` a
 `AssetStore-Server.postman_environment.json` a vpravo nahoře vybrat, proti čemu se volá. Hesla a klíče v souborech
-nejsou: v **Environments** → prostředí → sloupec **Current value** doplnit `password` (lokálně `SEED_ADMIN_PASSWORD`)
-a na serveru `writeKey` (dá Yura). Tajné hodnoty psát jen do **Current value**, ne do Initial value: Initial value
-se synchronizuje do cloudu Postmanu a vidí ji každý, s kým se prostředí sdílí.
+nejsou: v **Environments** → prostředí → sloupec **Current value** doplnit `password` (lokálně `SEED_ADMIN_PASSWORD`).
+Tajné hodnoty psát jen do **Current value**, ne do Initial value: Initial value se synchronizuje do cloudu Postmanu a vidí ji každý, s kým se prostředí sdílí.
 
 Každý požadavek má test na očekávaný status, takže celou složku jde pustit přes **Run**.
 
@@ -605,7 +605,7 @@ Nastavení serveru je v `~/assetStore/.env`. Vzor je `.env.example`, samotný `.
 | `AWS_REGION` | region bucketu, `eu-central-1` |
 | `MAX_UPLOAD_MB` | největší povolená velikost nahrávaného souboru v MB, výchozí 100 |
 | `MAX_STORAGE_GB` | limit pro všechny soubory dohromady v GB, výchozí 5 |
-| `WRITE_KEY` | společný klíč týmu pro nahrávání, úpravy a mazání; prázdné = zápis otevřený |
+| `JWT_PUBLIC_KEY` | veřejný klíč pro ověření přihlášení (identity, catalog); bez něj catalog na zápis vrací 503 |
 | `INTERNAL_KEY` | společný klíč služeb pro volání `/internal/...`; prázdné = bez kontroly. `openssl rand -hex 32` |
 
 Nový server se poprvé připraví skriptem `deploy/setup-server.sh` (Docker, swap, naklonování repozitáře). Instance
