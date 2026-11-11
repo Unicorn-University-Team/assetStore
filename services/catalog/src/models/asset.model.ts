@@ -1,6 +1,7 @@
 import { prisma } from '../db/prisma';
 import type { Asset } from '../generated/prisma/client';
 import { AuditLogModel, diffFields } from './audit-log.model';
+import { escapeLike } from '../utils/escapeLike';
 
 export type { Asset };
 
@@ -23,12 +24,13 @@ export type AssetInput = Pick<Asset, 'name' | 'description' | 'type' | 'fileKey'
 export type AssetUpdate = Pick<Asset, 'name' | 'description'>;
 
 export const AssetModel = {
+  // Newest first (AM asset/list); id breaks ties so that paging never repeats or skips an asset.
   async findPage(options: { name: string; pageIndex: number; pageSize: number }) {
-    const where = options.name ? { name: { contains: options.name, mode: 'insensitive' as const } } : {};
+    const where = options.name ? { name: { contains: escapeLike(options.name), mode: 'insensitive' as const } } : {};
     const [items, total] = await prisma.$transaction([
       prisma.asset.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         skip: options.pageIndex * options.pageSize,
         take: options.pageSize,
       }),

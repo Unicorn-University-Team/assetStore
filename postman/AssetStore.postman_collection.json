@@ -316,7 +316,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status 200', () => pm.response.to.have.status(200));",
-                  "const items = pm.response.json().items;",
+                  "const items = pm.response.json().itemList;",
                   "if (items.length) pm.collectionVariables.set('assetId', items[0].id);"
                 ]
               }
@@ -326,7 +326,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/assets?search=&page=1",
+              "raw": "{{baseUrl}}/api/assets?name=&pageIndex=0&pageSize=20",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -336,14 +336,19 @@
               ],
               "query": [
                 {
-                  "key": "search",
+                  "key": "name",
                   "value": "",
-                  "description": "Part of the name"
+                  "description": "Part of the name, any letter case, at most 100 characters"
                 },
                 {
-                  "key": "page",
-                  "value": "1",
-                  "description": "Page number from 1"
+                  "key": "pageIndex",
+                  "value": "0",
+                  "description": "Page number from 0"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "description": "1 to 100"
                 }
               ]
             },
