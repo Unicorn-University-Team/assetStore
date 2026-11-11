@@ -2,7 +2,7 @@
   "info": {
     "name": "Asset Store API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "All public endpoints of Asset Store (README, API).\n\n- Locally: `npm run dev`, baseUrl = http://localhost:5173 (Vite sends /api to the services like Caddy on the server).\n- Server: baseUrl = https://3-125-15-78.sslip.io, writeKey from Yura.\n\nLogin sets the access_token and refresh_token cookies; Postman keeps them and sends them with the next requests. Run \"Auth / Login\" first, then the rest. \"Assets / Create\" needs a file: in Body pick a file for the field \"file\"."
+    "description": "All public endpoints of Asset Store (README, API).\n\n- Locally: `npm run dev`, baseUrl = http://localhost:5173 (Vite sends /api to the services like Caddy on the server).\n- Server: baseUrl = https://3-125-15-78.sslip.io.\n\nLogin sets the access_token and refresh_token cookies; Postman keeps them and sends them with the next requests. Run \"Auth / Login\" first, then the rest: upload, edit and delete need the login (401 without it). \"Assets / Create\" needs a file: in Body pick a file for the field \"file\"."
   },
   "variable": [
     {
@@ -18,11 +18,6 @@
       "key": "password",
       "value": "",
       "description": "SEED_ADMIN_PASSWORD from services/identity/.env"
-    },
-    {
-      "key": "writeKey",
-      "value": "",
-      "description": "Empty locally; on the server the team key"
     },
     {
       "key": "assetId",
@@ -321,7 +316,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status 200', () => pm.response.to.have.status(200));",
-                  "const items = pm.response.json().items;",
+                  "const items = pm.response.json().itemList;",
                   "if (items.length) pm.collectionVariables.set('assetId', items[0].id);"
                 ]
               }
@@ -331,7 +326,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/assets?search=&page=1",
+              "raw": "{{baseUrl}}/api/assets?name=&pageIndex=0&pageSize=20",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -341,14 +336,19 @@
               ],
               "query": [
                 {
-                  "key": "search",
+                  "key": "name",
                   "value": "",
-                  "description": "Part of the name"
+                  "description": "Part of the name, any letter case, at most 100 characters"
                 },
                 {
-                  "key": "page",
-                  "value": "1",
-                  "description": "Page number from 1"
+                  "key": "pageIndex",
+                  "value": "0",
+                  "description": "Page number from 0"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "description": "1 to 100"
                 }
               ]
             },
@@ -371,13 +371,7 @@
           ],
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "X-Write-Key",
-                "value": "{{writeKey}}",
-                "description": "Only on the server (README, Ochrana zápisu). Locally empty."
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/assets",
               "host": [
@@ -463,11 +457,6 @@
             "method": "PUT",
             "header": [
               {
-                "key": "X-Write-Key",
-                "value": "{{writeKey}}",
-                "description": "Only on the server (README, Ochrana zápisu). Locally empty."
-              },
-              {
                 "key": "Content-Type",
                 "value": "application/json"
               }
@@ -541,13 +530,7 @@
           ],
           "request": {
             "method": "DELETE",
-            "header": [
-              {
-                "key": "X-Write-Key",
-                "value": "{{writeKey}}",
-                "description": "Only on the server (README, Ochrana zápisu). Locally empty."
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/assets/{{assetId}}",
               "host": [

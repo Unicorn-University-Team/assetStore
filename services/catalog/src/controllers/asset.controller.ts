@@ -85,6 +85,8 @@ export const AssetController = {
     // Refuse before reading the body when the storage is already full.
     if ((await AssetModel.totalFileSize()) >= STORAGE_LIMIT_BYTES) throw storageFull();
 
+    const actorId: string = res.locals.userId;
+
     const { fields, file } = await receiveUpload(req, {
       fileField: 'file',
       maxBytes: env.maxUploadMb * 1024 * 1024,
@@ -94,7 +96,7 @@ export const AssetController = {
 
     try {
       if ((await AssetModel.totalFileSize()) + file.size > STORAGE_LIMIT_BYTES) throw storageFull();
-      const asset = await AssetModel.create({
+      const input = {
         name: readName(fields.name),
         description: readDescription(fields.description),
         type: readType(fields.type),
@@ -102,7 +104,8 @@ export const AssetController = {
         fileName: file.fileName,
         fileSize: file.size,
         contentType: file.contentType,
-      });
+      };
+      const asset = await AssetModel.create(input, actorId);
       res.status(201).json(toAssetView(asset));
     } catch (error) {
       await FileStorage.remove(file.key).catch(() => undefined);
@@ -112,16 +115,18 @@ export const AssetController = {
 
   // JSON: name, description. The file itself is not replaced.
   async update(req: Request<IdParams>, res: Response) {
+    const actorId: string = res.locals.userId;
     const body = (req.body ?? {}) as { name?: unknown; description?: unknown };
     const input = { name: readName(body.name), description: readDescription(body.description) };
-    const asset = UUID.test(req.params.id) ? await AssetModel.update(req.params.id, input) : null;
+    const asset = UUID.test(req.params.id) ? await AssetModel.update(req.params.id, input, actorId) : null;
     if (!asset) throw new HttpError(404, 'Asset not found');
 
     res.json(toAssetView(asset));
   },
 
   async remove(req: Request<IdParams>, res: Response) {
-    const asset = UUID.test(req.params.id) ? await AssetModel.remove(req.params.id) : null;
+    const actorId: string = res.locals.userId;
+    const asset = UUID.test(req.params.id) ? await AssetModel.remove(req.params.id, actorId) : null;
     if (!asset) throw new HttpError(404, 'Asset not found');
 
     // The database row is gone already; a leftover file only costs storage, so log and carry on.
