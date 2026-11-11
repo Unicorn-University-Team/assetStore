@@ -12,8 +12,8 @@ export const env = {
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB) || 100,
   // Upper limit for all asset files together; uploads are refused once it is reached.
   maxStorageGb: Number(process.env.MAX_STORAGE_GB) || 5,
-  // Shared team key for upload, edit and delete until there are user accounts. Empty = writing is open.
-  writeKey: process.env.WRITE_KEY ?? '',
   // Shared secret that other services send in X-Internal-Key on /internal routes. Empty = not checked.
   internalKey: process.env.INTERNAL_KEY ?? '',
+  // Public key from identity for checking access tokens (README, Přihlášení). Empty = writing answers 503.
+  jwtPublicKey: process.env.JWT_PUBLIC_KEY ?? '',
 };

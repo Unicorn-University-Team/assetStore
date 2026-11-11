@@ -1,4 +1,5 @@
 import { errorHandler, notFound, requireInternalKey } from '@assetstore/shared';
+import cookieParser from 'cookie-parser';
 import express from 'express';
 import { env } from './config/env';
 import { prisma } from './db/prisma';
@@ -10,6 +11,8 @@ import { renderStatusPage } from './views/status.view';
 export const app = express();
 
 app.use(express.json());
+// Reads the access_token cookie for requireAuth; must come before the routes.
+app.use(cookieParser());
 
 app.get('/', (_req, res) => {
   res.type('html').send(renderStatusPage({ nodeEnv: env.nodeEnv, uptimeSeconds: process.uptime() }));
