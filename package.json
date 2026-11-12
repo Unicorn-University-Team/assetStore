@@ -12,6 +12,11 @@
   "scripts": {
     "postinstall": "npm run build -w @assetstore/shared && npm run db:generate --workspaces --if-present",
     "build": "npm run build --workspaces",
-    "typecheck": "npm run typecheck --workspaces"
+    "typecheck": "npm run typecheck --workspaces",
+    "test:auth3": "vitest run --config test/auth-3/vitest.config.mts",
+    "typecheck:auth3": "tsc --project test/auth-3/tsconfig.json"
+  },
+  "devDependencies": {
+    "vitest": "^5.1.0"
   }
 }
