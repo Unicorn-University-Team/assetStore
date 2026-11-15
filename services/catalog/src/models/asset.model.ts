@@ -36,8 +36,12 @@ function canDelete(asset: Asset, actor: Actor): boolean {
 
 export const AssetModel = {
   // Newest first (AM asset/list); id breaks ties so that paging never repeats or skips an asset.
-  async findPage(options: { name: string; pageIndex: number; pageSize: number }) {
-    const where = options.name ? { name: { contains: escapeLike(options.name), mode: 'insensitive' as const } } : {};
+  // ownerId = null lists everybody's assets.
+  async findPage(options: { name: string; ownerId: string | null; pageIndex: number; pageSize: number }) {
+    const where = {
+      ...(options.name ? { name: { contains: escapeLike(options.name), mode: 'insensitive' as const } } : {}),
+      ...(options.ownerId ? { ownerId: options.ownerId } : {}),
+    };
     const [items, total] = await prisma.$transaction([
       prisma.asset.findMany({
         where,

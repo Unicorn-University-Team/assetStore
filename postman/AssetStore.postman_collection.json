@@ -341,6 +341,12 @@
                   "description": "Part of the name, any letter case, at most 100 characters"
                 },
                 {
+                  "key": "ownerId",
+                  "value": "",
+                  "description": "Only this user's assets (id from Auth → Me)",
+                  "disabled": true
+                },
+                {
                   "key": "pageIndex",
                   "value": "0",
                   "description": "Page number from 0"
