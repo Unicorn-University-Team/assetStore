@@ -1,3 +1,4 @@
+import { HttpError } from '@assetstore/shared';
 import { prisma } from '../db/prisma';
 import type { Asset } from '../generated/prisma/client';
 import { AuditLogModel, diffFields } from './audit-log.model';
@@ -22,6 +23,16 @@ export const ALLOWED_EXTENSIONS: ReadonlySet<string> = new Set([
 
 export type AssetInput = Pick<Asset, 'name' | 'description' | 'type' | 'fileKey' | 'fileName' | 'fileSize' | 'contentType'>;
 export type AssetUpdate = Pick<Asset, 'name' | 'description'>;
+
+export type Actor = { id: string; role: 'USER' | 'ADMIN' };
+
+function canEdit(asset: Asset, actor: Actor): boolean {
+  return asset.ownerId !== null && asset.ownerId === actor.id;
+}
+
+function canDelete(asset: Asset, actor: Actor): boolean {
+  return canEdit(asset, actor) || actor.role === 'ADMIN';
+}
 
 export const AssetModel = {
   // Newest first (AM asset/list); id breaks ties so that paging never repeats or skips an asset.
@@ -51,19 +62,25 @@ export const AssetModel = {
 
   // Creating, updating and deleting write an audit log entry in the same transaction:
   // if the entry cannot be written, the change is undone (README, Audit log, rule 1).
-  create(input: AssetInput, actorId: string): Promise<Asset> {
+  create(input: AssetInput, actor: Actor): Promise<Asset> {
     return prisma.$transaction(async (tx) => {
-      const asset = await tx.asset.create({ data: input });
-      await AuditLogModel.create(tx, { action: 'assetCreated', objectType: 'asset', objectId: asset.id, actorId });
+      const asset = await tx.asset.create({ data: { ...input, ownerId: actor.id } });
+      await AuditLogModel.create(tx, {
+        action: 'assetCreated',
+        objectType: 'asset',
+        objectId: asset.id,
+        actorId: actor.id,
+      });
       return asset;
     });
   },
 
   // An update that changes nothing is not logged.
-  update(id: string, input: AssetUpdate, actorId: string): Promise<Asset | null> {
+  update(id: string, input: AssetUpdate, actor: Actor): Promise<Asset | null> {
     return prisma.$transaction(async (tx) => {
       const before = await tx.asset.findUnique({ where: { id } });
       if (!before) return null;
+      if (!canEdit(before, actor)) throw new HttpError(403, 'Only the owner can edit this asset');
 
       // updateMany, not update: an asset deleted in the meantime is a 404 (null), not an error.
       const { count } = await tx.asset.updateMany({ where: { id }, data: input });
@@ -72,7 +89,13 @@ export const AssetModel = {
       const after = await tx.asset.findUniqueOrThrow({ where: { id } });
       const changes = diffFields(before, after, ['name', 'description']);
       if (Object.keys(changes).length > 0) {
-        await AuditLogModel.create(tx, { action: 'assetUpdated', objectType: 'asset', objectId: id, changes, actorId });
+        await AuditLogModel.create(tx, {
+          action: 'assetUpdated',
+          objectType: 'asset',
+          objectId: id,
+          changes,
+          actorId: actor.id,
+        });
       }
       return after;
     });
@@ -85,12 +108,13 @@ export const AssetModel = {
 
   // Returns the deleted asset, so the caller can remove its file from S3 after the transaction:
   // if the audit log fails, the row comes back and the file must still be there.
-  remove(id: string, actorId: string): Promise<Asset | null> {
+  remove(id: string, actor: Actor): Promise<Asset | null> {
     return prisma.$transaction(async (tx) => {
       const asset = await tx.asset.findUnique({ where: { id } });
       if (!asset) return null;
+      if (!canDelete(asset, actor)) throw new HttpError(403, 'Only the owner or an admin can delete this asset');
       await tx.asset.delete({ where: { id } });
-      await AuditLogModel.create(tx, { action: 'assetDeleted', objectType: 'asset', objectId: id, actorId });
+      await AuditLogModel.create(tx, { action: 'assetDeleted', objectType: 'asset', objectId: id, actorId: actor.id });
       return asset;
     });
   },
