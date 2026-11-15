@@ -22,7 +22,7 @@ export interface AssetView {
 export function toAssetView(asset: Asset): AssetView {
   return {
     id: asset.id,
-    ownerId: null,
+    ownerId: asset.ownerId,
     ownerName: null,
     name: asset.name,
     description: asset.description,
