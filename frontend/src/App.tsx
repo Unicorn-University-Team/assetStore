@@ -7,6 +7,8 @@ import AssetDetailPage from './pages/AssetDetailPage'
 import AuthPage from './pages/AuthPage'
 import CatalogPage from './pages/CatalogPage'
 import MockupAssetPage from './pages/MockupAssetPage'
+import MyAssetsPage from './pages/MyAssetsPage'
+import NewAssetPage from './pages/NewAssetPage'
 
 function NotFoundPage() {
   return (
@@ -30,8 +32,10 @@ export default function App() {
             <Route path="login" element={<AuthPage mode="login" />} />
             <Route path="register" element={<AuthPage mode="register" />} />
             <Route path="asset-mockup" element={<MockupAssetPage />} />
-            {/* Real /my and /admin pages replace these placeholders; the guard already sends anonymous visitors to /login. */}
             <Route element={<RequireAuth />}>
+              <Route path="my" element={<Navigate to="/my/assets" replace />} />
+              <Route path="my/assets" element={<MyAssetsPage />} />
+              <Route path="my/assets/new" element={<NewAssetPage />} />
               <Route path="my/*" element={<NotFoundPage />} />
               <Route path="admin/*" element={<NotFoundPage />} />
             </Route>
