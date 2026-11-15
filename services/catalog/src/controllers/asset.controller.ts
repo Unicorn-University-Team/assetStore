@@ -47,6 +47,13 @@ function readSearchName(value: unknown): string {
   return value.trim();
 }
 
+// asset/list filter by owner ("My assets"): optional user id from identity.
+function readOwnerId(value: unknown): string | null {
+  if (value === undefined) return null;
+  if (typeof value !== 'string' || !UUID.test(value)) throw new HttpError(400, '"ownerId" must be a uuid');
+  return value.toLowerCase();
+}
+
 // Whole number from the query string (always a string there, or an array if the parameter is repeated).
 // max = null means no upper limit.
 function readInteger(field: string, value: unknown, min: number, max: number | null, fallback: number): number {
@@ -73,9 +80,10 @@ function readActor(res: Response): Actor {
 export const AssetController = {
   async list(req: Request, res: Response) {
     const search = readSearchName(req.query.name);
+    const ownerId = readOwnerId(req.query.ownerId);
     const pageIndex = readInteger('pageIndex', req.query.pageIndex, 0, null, 0);
     const pageSize = readInteger('pageSize', req.query.pageSize, 1, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE);
-    const { items, total } = await AssetModel.findPage({ name: search, pageIndex, pageSize });
+    const { items, total } = await AssetModel.findPage({ name: search, ownerId, pageIndex, pageSize });
 
     res.json({ itemList: items.map(toAssetView), pageInfo: { pageIndex, pageSize, total } });
   },
