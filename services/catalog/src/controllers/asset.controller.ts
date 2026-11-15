@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { pipeline } from 'node:stream/promises';
 import { env } from '../config/env';
-import { ALLOWED_EXTENSIONS, ASSET_TYPES, AssetModel, type Asset, type AssetType } from '../models/asset.model';
+import { ALLOWED_EXTENSIONS, ASSET_TYPES, AssetModel, type Actor, type Asset, type AssetType } from '../models/asset.model';
 import { FileStorage } from '../storage/file-storage';
 import { HttpError } from '@assetstore/shared';
 import { receiveUpload } from '../utils/receiveUpload';
@@ -66,6 +66,10 @@ async function findAsset(id: string): Promise<Asset> {
   return asset;
 }
 
+function readActor(res: Response): Actor {
+  return { id: res.locals.userId as string, role: res.locals.role as Actor['role'] };
+}
+
 export const AssetController = {
   async list(req: Request, res: Response) {
     const search = readSearchName(req.query.name);
@@ -85,7 +89,7 @@ export const AssetController = {
     // Refuse before reading the body when the storage is already full.
     if ((await AssetModel.totalFileSize()) >= STORAGE_LIMIT_BYTES) throw storageFull();
 
-    const actorId: string = res.locals.userId;
+    const actor = readActor(res);
 
     const { fields, file } = await receiveUpload(req, {
       fileField: 'file',
@@ -105,7 +109,7 @@ export const AssetController = {
         fileSize: file.size,
         contentType: file.contentType,
       };
-      const asset = await AssetModel.create(input, actorId);
+      const asset = await AssetModel.create(input, actor);
       res.status(201).json(toAssetView(asset));
     } catch (error) {
       await FileStorage.remove(file.key).catch(() => undefined);
@@ -115,18 +119,18 @@ export const AssetController = {
 
   // JSON: name, description. The file itself is not replaced.
   async update(req: Request<IdParams>, res: Response) {
-    const actorId: string = res.locals.userId;
+    const actor = readActor(res);
     const body = (req.body ?? {}) as { name?: unknown; description?: unknown };
     const input = { name: readName(body.name), description: readDescription(body.description) };
-    const asset = UUID.test(req.params.id) ? await AssetModel.update(req.params.id, input, actorId) : null;
+    const asset = UUID.test(req.params.id) ? await AssetModel.update(req.params.id, input, actor) : null;
     if (!asset) throw new HttpError(404, 'Asset not found');
 
     res.json(toAssetView(asset));
   },
 
   async remove(req: Request<IdParams>, res: Response) {
-    const actorId: string = res.locals.userId;
-    const asset = UUID.test(req.params.id) ? await AssetModel.remove(req.params.id, actorId) : null;
+    const actor = readActor(res);
+    const asset = UUID.test(req.params.id) ? await AssetModel.remove(req.params.id, actor) : null;
     if (!asset) throw new HttpError(404, 'Asset not found');
 
     // The database row is gone already; a leftover file only costs storage, so log and carry on.

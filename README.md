@@ -255,7 +255,7 @@ Ve frontendu stačí obyčejný odkaz: `<a href={downloadUrl(asset.id)}>Stáhnou
 
 ### Smazání: `DELETE /api/assets/:id`
 
-Nejdřív se smaže záznam v databázi, takže asset hned zmizí z katalogu, potom soubor v S3. Když se smazání v S3
+Smazat smí vlastník assetu nebo admin, ostatní dostanou **403**. Nejdřív se smaže záznam v databázi, takže asset hned zmizí z katalogu, potom soubor v S3. Když se smazání v S3
 nepovede, chyba se zapíše do logu služby catalog a záznam zůstane smazaný.
 
 ### Chyby
@@ -263,6 +263,7 @@ nepovede, chyba se zapíše do logu služby catalog a záznam zůstane smazaný.
 | Kód | Kdy |
 |---|---|
 | 401 | uživatel není přihlášený, token je neplatný nebo prošlý |
+| 403 | úprava cizího assetu, smazání cizího assetu (kromě admina), viz [Ochrana zápisu](#ochrana-zápisu) |
 | 400 | chybí `name` nebo `file`, neplatný `type`, nepovolená přípona, požadavek není `multipart/form-data` |
 | 404 | asset neexistuje (i neplatné id) |
 | 413 | soubor je větší než `MAX_UPLOAD_MB` |
@@ -293,8 +294,6 @@ Nahrání a smazání potřebují přihlášení: `cookies.txt` vznikne při př
 
 ### Co zatím chybí
 
-- Vlastník assetu (`owner_id`) a kontrola práv. Zápis už vyžaduje přihlášení, ale každý přihlášený zatím může
-  upravit nebo smazat i cizí asset, viz [Ochrana zápisu](#ochrana-zápisu).
 - Tagy, recenze, kolekce.
 
 ## Přihlášení
@@ -336,7 +335,7 @@ opakovaně, existující účty nemění.
 
 `POST`, `PUT` a `DELETE` na `/api/assets` smí jen přihlášený uživatel. Catalog ověří access token z cookie
 `access_token` veřejným klíčem (`JWT_PUBLIC_KEY`, stejná hodnota jako v identity) a id uživatele zapíše do audit
-logu jako `actorId`. Platí dvě pojistky:
+logu jako `actorId`. Platí tři pojistky:
 
 1. **Přihlášení.** Bez cookie nebo s neplatným či prošlým tokenem je odpověď **401** a soubor se ani nezačne
    nahrávat. Když catalog nemá `JWT_PUBLIC_KEY`, odpoví **503**. Prohlížení, hledání a stahování přihlášení
@@ -353,7 +352,12 @@ curl -c cookies.txt -H 'Content-Type: application/json' -d '{"email":"admin@exam
 curl -b cookies.txt -F name='Meč' -F type=3d -F file=@sword.glb http://localhost:3002/api/assets
 ```
 
-**Zatím chybí kontrola vlastníka:** každý přihlášený může upravit nebo smazat i cizí asset (`Asset` nemá `ownerId`).
+3. **Vlastník.** Kdo asset nahraje, je jeho vlastník (`ownerId` se bere z tokenu, nikdy z požadavku). Upravit
+   asset smí jen vlastník, smazat vlastník nebo admin. Ostatní dostanou **403** (ne 404: assety jsou veřejné, není
+   co skrývat). Assety nahrané dřív než vlastníci mají `ownerId = null`: upravit je nesmí nikdo, smazat jen admin.
+   Kontrola je v `AssetModel` (`services/catalog/src/models/asset.model.ts`) nad záznamem přečteným v transakci,
+   ne v middleware, takže se asset nečte dvakrát a mezi kontrolou a změnou ho nikdo nepřepíše.
+
 Registrace je otevřená, na serveru cizí lidi drží venku `SITE_AUTH`.
 
 ## Komunikace mezi službami
@@ -481,18 +485,19 @@ připravená prázdná služba. Všechno se dá vyzkoušet v Postmanu, viz [Post
 | `GET` | `/api/assets?name=&pageIndex=&pageSize=` | seznam od nejnovějších, hledání v názvu bez ohledu na velikost písmen (`%` a `_` jsou obyčejné znaky); stránky od 0, `pageSize` 1–100 (výchozí 20), jinak 400: `{ itemList, pageInfo: { pageIndex, pageSize, total } }` |
 | `GET` | `/api/assets/:id` | jeden asset |
 | `POST` | `/api/assets` | nahrání, `multipart/form-data`: `name`, `description`, `type`, `file`; potřebuje přihlášení |
-| `PUT` | `/api/assets/:id` | JSON `{ name, description }`, soubor se nemění; potřebuje přihlášení |
-| `DELETE` | `/api/assets/:id` | smaže záznam i soubor; potřebuje přihlášení |
+| `PUT` | `/api/assets/:id` | JSON `{ name, description }`, soubor se nemění; jen vlastník, jinak **403** |
+| `DELETE` | `/api/assets/:id` | smaže záznam i soubor; jen vlastník nebo admin, jinak **403** |
 | `GET` | `/api/assets/:id/download` | stažení souboru, `downloadCount` + 1 |
 | `GET` | `/api/tags?prefix=` | nápověda tagů a filtr (AM `tag/list`): nejvýš 10 tagů začínajících na `prefix` (bez ohledu na velikost písmen, nejvýš 50 znaků, jinak **400**), řazeno podle názvu: `{ itemList: [{ id, name }] }` |
 
-Asset v odpovědi (`services/catalog/src/views/asset.view.ts`). `ownerId`, `ownerName`, `previewUrl` a `averageRating`
-jsou zatím `null`, `tagList` je `[]` a `reviewCount` je 0, dokud nejsou vlastníci, tagy, náhledy a recenze:
+Asset v odpovědi (`services/catalog/src/views/asset.view.ts`). `ownerId` je id uživatele z identity (u starých
+assetů `null`). `ownerName`, `previewUrl` a `averageRating` jsou zatím `null`, `tagList` je `[]` a `reviewCount`
+je 0, dokud nejsou jména z identity, tagy, náhledy a recenze:
 
 ```json
 {
   "id": "1f628f53-d68c-47d0-b147-0f7b0386ad43",
-  "ownerId": null,
+  "ownerId": "29367033-ee56-41e2-a003-d463a556c47c",
   "ownerName": null,
   "name": "Medieval sword",
   "description": "Low poly",
