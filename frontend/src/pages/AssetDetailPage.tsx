@@ -41,9 +41,15 @@ export default function AssetDetailPage() {
     document.getElementById(`asset-${name}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
-  // The file comes as a plain download (no fetch), so the count shown here is raised by hand.
+  // The file comes as a plain download (no fetch). The server counts it before sending the file, so a moment later
+  // the asset is read again: a download that failed (e.g. a missing file) does not raise the number.
   function countDownload() {
-    setLoaded((previous) => previous?.asset ? { ...previous, asset: { ...previous.asset, downloadCount: previous.asset.downloadCount + 1 } } : previous)
+    const assetId = id
+    window.setTimeout(() => {
+      apiGet<Asset>(`/assets/${encodeURIComponent(assetId)}`)
+        .then((fresh) => setLoaded((previous) => previous?.id === assetId && previous.asset ? { ...previous, asset: { ...previous.asset, downloadCount: fresh.downloadCount } } : previous))
+        .catch(() => undefined)
+    }, 1000)
   }
 
   if (error) return <main className="content-width page-state"><div className="breadcrumbs"><Link to="/">Catalogue</Link><span>/</span><span>Asset</span></div><InlineError message={error} /><Link className="button button-secondary" to="/">Back to the catalogue</Link></main>
@@ -68,7 +74,7 @@ export default function AssetDetailPage() {
         <aside className="asset-sidebar">
           <p className="eyebrow">{typeName} asset</p><h1>{asset.name}</h1><p className="asset-owner">{asset.ownerName ? `By ${asset.ownerName}` : 'Shared by the community'}</p>
           <div className="rating-row"><span className="rating-stars">{asset.averageRating == null ? '☆☆☆☆☆' : `★ ${asset.averageRating.toFixed(1)}`}</span><span>{asset.averageRating == null ? 'No ratings yet' : `${asset.reviewCount} ${asset.reviewCount === 1 ? 'review' : 'reviews'}`}</span></div>
-          <div className="download-count">{asset.downloadCount.toLocaleString()} downloads</div>
+          <div className="download-count">{asset.downloadCount.toLocaleString()} {asset.downloadCount === 1 ? 'download' : 'downloads'}</div>
           {/* download: an error answer (e.g. a missing file) fails in the browser's downloads instead of replacing this page */}
           <a className="button button-primary download-button" href={`/api/assets/${encodeURIComponent(asset.id)}/download`} download onClick={countDownload}>Download <span>↓</span><small>{formatSize(asset.fileSize)}</small></a>
           <p className="free-note">Free to download · no account needed</p><div className="sidebar-rule"/>
