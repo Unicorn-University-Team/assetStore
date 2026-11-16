@@ -1,12 +1,16 @@
 import { errorHandler, notFound, requireInternalKey } from '@assetstore/shared';
+import cookieParser from 'cookie-parser';
 import express, { type Request, type Response } from 'express';
 import { CatalogClient } from './clients/catalog.client';
 import { env } from './config/env';
 import { prisma } from './db/prisma';
+import { assetReportRoutes, reportRoutes } from './routes/report.routes';
 
 export const app = express();
 
 app.use(express.json());
+// Reads the access_token cookie for requireAuth; must come before the routes.
+app.use(cookieParser());
 
 // Docker healthcheck and Caddy (/api/health/community) use this; it is not part of the public API.
 app.get('/health', async (_req, res) => {
@@ -23,6 +27,8 @@ app.get('/health', async (_req, res) => {
 //   /api/assets/:id/reviews, /api/reviews/...    reviews
 //   /api/collections/...                         collections
 //   /api/assets/:id/reports, /api/reports/...    reports
+app.use('/api/assets/:assetId/reports', assetReportRoutes);
+app.use('/api/reports', reportRoutes);
 
 // Temporary check of community -> catalog communication; remove once reviews call CatalogClient themselves.
 async function checkAsset(req: Request<{ id: string }>, res: Response) {

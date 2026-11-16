@@ -60,6 +60,11 @@ export const AssetModel = {
     return result._sum.fileSize ?? 0;
   },
 
+  // Name and owner only, for other services (GET /internal/assets).
+  findSummaries(ids: string[]) {
+    return prisma.asset.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, ownerId: true } });
+  },
+
   findById(id: string): Promise<Asset | null> {
     return prisma.asset.findUnique({ where: { id } });
   },
