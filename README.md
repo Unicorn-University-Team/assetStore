@@ -330,7 +330,7 @@ Registraci a přihlášení dělá služba identity:
 
 | Metoda | Cesta | Co dělá |
 |---|---|---|
-| `POST` | `/api/auth/register` | `{ username, email, password }` → **201** `{ id, username, email }`, obsazené jméno nebo e-mail → **409** |
+| `POST` | `/api/auth/register` | `{ username, email, password }` → **201** `{ id, username, email }`, obsazené jméno nebo e-mail → **409** (jméno bez ohledu na velikost písmen: `Tester` = `tester`) |
 | `POST` | `/api/auth/login` | `{ email, password }` → nastaví cookies `access_token` a `refresh_token`, zablokovaný účet → **403** |
 | `GET` | `/api/auth/me` | přihlášený uživatel `{ user: { id, username, email, role, status } }`; bez jakékoli cookie session `{ user: null }` (**200**, nikdo není přihlášený), s neplatným nebo prošlým tokenem **401** |
 | `POST` | `/api/auth/refresh` | vymění refresh token za nový access token a nový refresh token |
