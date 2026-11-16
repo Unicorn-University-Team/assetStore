@@ -46,7 +46,8 @@ function SiteHeader() {
           <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span><span>assetStore</span>
         </Link>
         {isCatalog ? <span className="header-spacer" /> : <SearchBar value="" onSearch={searchAssets} />}
-        <Link className="header-publish" to="/login">Publish an asset</Link>
+        {/* On a phone only "Publish": with the account links it still fits on the first row. */}
+        <Link className="header-publish" to="/login">Publish<span className="header-publish-more"> an asset</span></Link>
         <HeaderAccount />
       </div>
     </header>

@@ -5,6 +5,7 @@ import { REPORT_COMMENT_MAX, REPORT_REASONS, createReport, reasonLabel, type Rep
 import { useAuth } from '../auth/auth-context'
 import ConfirmDialog from './ConfirmDialog'
 import InlineError from './InlineError'
+import { useModal } from './useModal'
 
 type Step = 'idle' | 'choosing' | 'confirming' | 'sending' | 'sent' | 'already'
 
@@ -21,7 +22,10 @@ type ReasonDialogProps = {
 // Step 1: the reason (required) and an optional comment.
 function ReasonDialog({ reason, comment, error, onReason, onComment, onCancel, onContinue }: ReasonDialogProps) {
   const id = useId()
+  const dialog = useRef<HTMLElement>(null)
   const firstReason = useRef<HTMLInputElement>(null)
+  // Before the focus moves into the dialog: it remembers where the focus was.
+  useModal(dialog)
 
   useEffect(() => {
     firstReason.current?.focus()
@@ -37,7 +41,7 @@ function ReasonDialog({ reason, comment, error, onReason, onComment, onCancel, o
 
   return (
     <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel() }}>
-      <section className="confirm-dialog report-dialog" role="dialog" aria-modal="true" aria-labelledby={`${id}-title`}>
+      <section ref={dialog} className="confirm-dialog report-dialog" role="dialog" aria-modal="true" aria-labelledby={`${id}-title`}>
         <span className="dialog-mark" aria-hidden="true">!</span>
         <h2 id={`${id}-title`}>Report this asset</h2>
         <p>Tell us what is wrong. An admin will review your report.</p>
@@ -98,8 +102,9 @@ export default function ReportAsset({ assetId, assetName, ownerId }: { assetId: 
   const back = useCallback(() => setStep('choosing'), [])
 
   if (status === 'loading' || (user && user.id === ownerId)) return null
-  if (step === 'sent') return <p className="report-note" role="status">Thanks, your report was sent. An admin will review it.</p>
-  if (step === 'already') return <p className="report-note" role="status">You have already reported this asset. An admin will review it.</p>
+  // The button that opened the dialogs is gone now, so the focus goes to the note that replaced it.
+  if (step === 'sent') return <p ref={focusNote} tabIndex={-1} className="report-note" role="status">Thanks, your report was sent. An admin will review it.</p>
+  if (step === 'already') return <p ref={focusNote} tabIndex={-1} className="report-note" role="status">You have already reported this asset. An admin will review it.</p>
 
   function start() {
     // Reporting needs an account; after logging in the visitor comes back here.
@@ -153,4 +158,8 @@ export default function ReportAsset({ assetId, assetName, ownerId }: { assetId: 
       )}
     </>
   )
+}
+
+function focusNote(note: HTMLParagraphElement | null) {
+  note?.focus()
 }
