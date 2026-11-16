@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { listAssets, type AssetPage } from '../api/assets'
+import { SEARCH_MAX_LENGTH, listAssets, type AssetPage } from '../api/assets'
 import AssetGrid from '../components/AssetGrid'
 import InlineError from '../components/InlineError'
 import Pagination from '../components/Pagination'
@@ -9,7 +9,8 @@ import { usePageTitle } from '../usePageTitle'
 
 export default function CatalogPage() {
   const [params, setParams] = useSearchParams()
-  const search = params.get('search') ?? ''
+  // A longer search typed into the URL is cut to what the API accepts.
+  const search = (params.get('search') ?? '').slice(0, SEARCH_MAX_LENGTH)
   const page = Math.max(1, Number(params.get('page') ?? '1') || 1)
   // The answer remembers which search and page it is for; loading = it is not for the current ones yet.
   const request = `${page}:${search}`

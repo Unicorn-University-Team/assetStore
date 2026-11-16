@@ -32,8 +32,14 @@ export default function AdminReportsPage() {
   const page = Math.max(1, Number(params.get('page') ?? '1') || 1)
   const request = `${status}:${page}`
   const [loaded, setLoaded] = useState<{ request: string; result: ReportPage | null; error: string } | null>(null)
-  const notice = readNotice(location.state)
+  // The notice is kept here and removed from the history entry at once, so a reload does not show it again.
+  const [notice, setNotice] = useState(() => readNotice(location.state))
+  const handedNotice = readNotice(location.state)
   usePageTitle('Reports')
+
+  useEffect(() => {
+    if (handedNotice) navigate(location.pathname + location.search, { replace: true, state: null })
+  }, [handedNotice, navigate, location.pathname, location.search])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -76,7 +82,7 @@ export default function AdminReportsPage() {
       {notice && (
         <p className="admin-notice" role="status">
           {notice}
-          <button type="button" className="text-link" onClick={() => navigate(location.pathname + location.search, { replace: true })}>Dismiss</button>
+          <button type="button" className="text-link" onClick={() => setNotice('')}>Dismiss</button>
         </p>
       )}
       <div className="filter-tabs" role="group" aria-label="Filter by status">
