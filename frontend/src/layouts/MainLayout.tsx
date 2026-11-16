@@ -21,6 +21,7 @@ function HeaderAccount() {
 
   return (
     <div className="header-account">
+      {user.role === 'ADMIN' && <Link className="header-login" to="/admin/reports">Reports</Link>}
       <span className="header-username">{user.username}</span>
       <button className="header-login" type="button" onClick={() => { void onLogout() }} disabled={busy}>Log out</button>
     </div>
