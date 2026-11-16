@@ -12,6 +12,31 @@ datasource db {
   provider = "postgresql"
 }
 
+// A user's report of an asset (REP-1…3): US-5 report, US-6 accept, US-7 deny. Asset and users live in other
+// services, so only their ids are stored here; names come from catalog and identity when reports are read.
+model Report {
+  id           String    @id @default(uuid()) @db.Uuid
+  assetId      String    @map("asset_id") @db.Uuid
+  // Owner of the asset when it was reported (from catalog); stays known even after the asset is deleted.
+  assetOwnerId String?   @map("asset_owner_id") @db.Uuid
+  // Who reported it.
+  authorId     String    @map("author_id") @db.Uuid
+  // copyright | inappropriate | malware | spam | other (REPORT_REASONS in ReportModel, CHECK in the migration)
+  reason       String    @db.VarChar(20)
+  comment      String    @default("") @db.VarChar(500)
+  // open | resolved | rejected (CHECK in the migration)
+  status       String    @default("open") @db.VarChar(10)
+  // The admin who accepted or denied the report, and when.
+  decidedBy    String?   @map("decided_by") @db.Uuid
+  decidedAt    DateTime? @map("decided_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@index([status, createdAt])
+  @@index([assetId, authorId])
+  @@map("report")
+}
+
 // Audit log (README, Audit log): who did what to which object and when. Each service keeps its own table with the
 // same columns. Rows are only ever added: never updated or deleted.
 model AuditLog {

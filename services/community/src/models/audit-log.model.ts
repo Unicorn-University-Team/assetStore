@@ -9,8 +9,8 @@ export type AuditLogEntry = {
   action: AuditAction;
   objectType: 'report';
   objectId: string;
-  // Who did it (the admin); null until community knows the logged-in user.
-  actorId?: string | null;
+  // Who did it (the admin).
+  actorId: string;
 };
 
 export const AuditLogModel = {

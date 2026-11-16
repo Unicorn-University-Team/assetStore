@@ -299,6 +299,31 @@ Nahrání a smazání potřebují přihlášení: `cookies.txt` vznikne při př
 
 - Tagy, recenze, kolekce.
 
+## Nahlášení assetů (reporty)
+
+Reporty jsou ve službě **community** (tabulka `report`, `services/community/src/models/report.model.ts`). Asset
+a uživatelé jsou v jiných službách, proto se ukládají jen jejich id a jména se při čtení doptají catalog (název
+assetu) a identity (jména uživatelů) přes `/internal` (viz [Komunikace mezi službami](#komunikace-mezi-službami)).
+
+| Metoda | Cesta | Kdo | Co dělá |
+|---|---|---|---|
+| `POST` | `/api/assets/:id/reports` | přihlášený | US-5: `{ reason, comment? }` → **201** report |
+| `GET` | `/api/reports?status=&pageIndex=&pageSize=` | admin | seznam od nejnovějších; `status` `open` (výchozí), `resolved`, `rejected` nebo `all`; stránky jako u assetů: `{ itemList, pageInfo }` |
+| `GET` | `/api/reports/:id` | admin | jeden report |
+| `POST` | `/api/reports/:id/reject` | admin | US-7: zamítnutí, `open` → `rejected`, zapíše `reportRejected` do audit logu |
+
+- **Důvody** (`reason`): `copyright`, `inappropriate`, `malware`, `spam`, `other`. `comment` je nepovinný, nejvýš
+  500 znaků. Stejný seznam je ve frontendu (`frontend/src/api/reports.ts`) a jako CHECK v databázi.
+- **Stavy:** `open` → `resolved` (US-6, přijetí: zatím chybí) nebo `rejected` (US-7). Rozhodnutý report má
+  `decidedById` a `decidedAt`.
+- **Pravidla:** vlastní asset nahlásit nejde (**403**), stejný uživatel má na jeden asset nejvýš jeden otevřený
+  report (**409**), neexistující asset → **404**. Rozhodnutý report znovu zamítnout nejde (**409**). Seznam, detail
+  a zamítnutí bez role admin → **403**, bez přihlášení **401**. Bez `JWT_PUBLIC_KEY` odpoví community **503**.
+- **Report v odpovědi** (`services/community/src/views/report.view.ts`): `id`, `assetId`, `assetName`, `assetOwnerId`,
+  `assetOwnerName`, `authorId`, `authorName`, `reason`, `comment`, `status`, `createdAt`, `decidedById`,
+  `decidedByName`, `decidedAt`. Jména jsou `null`, když asset nebo uživatel už neexistuje nebo služba neodpověděla;
+  `assetOwnerId` je vlastník v době nahlášení, takže zůstane i po smazání assetu.
+
 ## Přihlášení
 
 Registraci a přihlášení dělá služba identity:
@@ -385,7 +410,8 @@ community ──GET /internal/assets/:id/exists──▶ catalog ──▶ datab
 | Služba | Cesta | Odpověď | Kdo volá |
 |---|---|---|---|
 | catalog | `GET /internal/assets/:id/exists` | `{ "exists": boolean }` | community |
-| identity | `GET /internal/users?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "id", "username" }] }`, neznámá id chybí | catalog (`ownerName`) |
+| identity | `GET /internal/users?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "id", "username" }] }`, neznámá id chybí | catalog (`ownerName`), community (jména v reportech) |
+| catalog | `GET /internal/assets?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "id", "name", "ownerId" }] }`, smazané assety chybí | community (reporty) |
 
 ### Nová interní cesta
 
@@ -428,7 +454,7 @@ třech `schema.prisma` stejný a tak má zůstat.
 | Služba | Akce | Stav |
 |---|---|---|
 | catalog | `assetCreated`, `assetUpdated`, `assetDeleted` | zapisuje se |
-| community | `reportResolved`, `reportRejected` | jen tabulka a model, příkazy pro reporty zatím nejsou |
+| community | `reportResolved`, `reportRejected` | `reportRejected` (US-7) se zapisuje, přijetí reportu (US-6) zatím není |
 | identity | `userDeleted` | jen tabulka a model, mazání uživatele zatím není |
 
 Sloupce: `actorId` (kdo akci provedl), `action`, `objectType` (`asset`, `report`, `user`), `objectId`, `changes`
@@ -480,8 +506,8 @@ a bez CORS.
 
 ## API
 
-Endpointy mají zatím **catalog** (assety) a **identity** (přihlášení, viz [Přihlášení](#přihlášení)); community je
-připravená prázdná služba. Všechno se dá vyzkoušet v Postmanu, viz [Postman](#postman) níže.
+Endpointy mají **catalog** (assety), **identity** (přihlášení, viz [Přihlášení](#přihlášení)) a **community**
+(reporty, viz [Nahlášení assetů](#nahlášení-assetů-reporty)). Všechno se dá vyzkoušet v Postmanu, viz [Postman](#postman) níže.
 
 | Metoda | Cesta | Co dělá |
 |---|---|---|
