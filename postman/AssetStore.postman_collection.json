@@ -239,7 +239,7 @@
                 "me"
               ]
             },
-            "description": "The signed-in user. 401 without a valid access token: call Refresh or Login."
+            "description": "The signed-in user. No session cookie at all: 200 { user: null }. Invalid or expired access token: 401, call Refresh or Login."
           }
         },
         {
