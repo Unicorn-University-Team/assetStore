@@ -7,9 +7,10 @@ export const UserModel = {
     });
   },
 
+  // Ignores case: "Tester" and "tester" are the same name (unique index on lower(username) in the migration).
   async findByUsername(username: string) {
-    return await prisma.user.findUnique({
-      where: { username: username },
+    return await prisma.user.findFirst({
+      where: { username: { equals: username, mode: "insensitive" } },
     });
   },
 
