@@ -5,6 +5,7 @@ import AssetGrid from '../components/AssetGrid'
 import InlineError from '../components/InlineError'
 import Pagination from '../components/Pagination'
 import SearchBar from '../components/SearchBar'
+import { usePageTitle } from '../usePageTitle'
 
 export default function CatalogPage() {
   const [params, setParams] = useSearchParams()
@@ -13,6 +14,7 @@ export default function CatalogPage() {
   // The answer remembers which search and page it is for; loading = it is not for the current ones yet.
   const request = `${page}:${search}`
   const [loaded, setLoaded] = useState<{ request: string; result: AssetPage | null; error: string } | null>(null)
+  usePageTitle(search ? `“${search}” in the catalogue` : 'Catalogue')
 
   useEffect(() => {
     const controller = new AbortController()
