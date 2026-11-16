@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { apiGet } from '../api/client'
 import type { Asset } from '../api/assets'
 import InlineError from '../components/InlineError'
+import ReportAsset from '../components/ReportAsset'
 import { usePageTitle } from '../usePageTitle'
 
 const TYPE_NAMES: Record<string, string> = {
@@ -72,7 +73,7 @@ export default function AssetDetailPage() {
           <a className="button button-primary download-button" href={`/api/assets/${encodeURIComponent(asset.id)}/download`} download onClick={countDownload}>Download <span>↓</span><small>{formatSize(asset.fileSize)}</small></a>
           <p className="free-note">Free to download · no account needed</p><div className="sidebar-rule"/>
           <dl className="asset-facts"><div><dt>File</dt><dd>{asset.fileName}</dd></div><div><dt>Size</dt><dd>{formatSize(asset.fileSize)}</dd></div><div><dt>Published</dt><dd>{new Date(asset.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</dd></div><div><dt>Downloads</dt><dd>{asset.downloadCount.toLocaleString()}</dd></div></dl>
-          <Link className="report-link" to="/login">Report this asset</Link>
+          <ReportAsset assetId={asset.id} assetName={asset.name} ownerId={asset.ownerId} />
         </aside>
       </div>
     </main>
