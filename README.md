@@ -43,7 +43,7 @@ frontend/
 └── src/
     ├── api/client.ts             fetch na /api
     ├── api/assets.ts             assety: seznam, nahrání, smazání, odkaz ke stažení
-    └── components/               komponenty (AssetsDemo.tsx = testovací stránka)
+    └── components/               komponenty (karta assetu, vyhledávání, dialogy…)
 deploy/                           Caddy (API gateway), skripty pro server a AWS, vytvoření databází
 docker-compose.yml                celý stack: PostgreSQL, tři služby, Caddy s frontendem
 package.json                      kořen npm workspaces pro backend (frontend má vlastní)

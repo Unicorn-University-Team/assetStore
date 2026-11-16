@@ -48,6 +48,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     await logoutRequest()
+    // Public pages (catalogue, asset detail) stay where they are; only pages behind RequireAuth go to the catalogue.
+    const { pathname } = window.location
+    if (!isProtectedPath(pathname)) {
+      setUser(null)
+      return
+    }
     // React Router changes the location inside a transition. Clearing the user in the same transition
     // renders both together, so a protected page never sees "no user" and never redirects to /login.
     startTransition(() => {
@@ -62,6 +68,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+}
+
+// The paths that App.tsx puts behind RequireAuth.
+function isProtectedPath(pathname: string): boolean {
+  return /^\/(my|admin)(\/|$)/.test(pathname)
 }
 
 function isAbort(error: unknown): boolean {

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/auth-context'
 import SearchBar from '../components/SearchBar'
 
@@ -29,11 +29,13 @@ function HeaderAccount() {
 
 function SiteHeader() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const search = searchParams.get('search') ?? ''
+  const { pathname } = useLocation()
+  // The catalogue has its own search field; a second one in the header would do the same thing.
+  const isCatalog = pathname === '/'
 
   function searchAssets(value: string) {
-    navigate(value ? `/?search=${encodeURIComponent(value)}` : '/')
+    // Clearing the field (×) on another page only empties it, it does not leave the page.
+    if (value) navigate(`/?search=${encodeURIComponent(value)}`)
   }
 
   return (
@@ -42,8 +44,7 @@ function SiteHeader() {
         <Link className="brand" to="/" aria-label="assetStore home">
           <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span><span>assetStore</span>
         </Link>
-        {/* key: a new search in the URL (link, back button) starts the field over with that value */}
-        <SearchBar key={search} value={search} onSearch={searchAssets} />
+        {isCatalog ? <span className="header-spacer" /> : <SearchBar value="" onSearch={searchAssets} />}
         <Link className="header-publish" to="/login">Publish an asset</Link>
         <HeaderAccount />
       </div>
