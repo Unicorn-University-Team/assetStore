@@ -246,12 +246,14 @@ Když se cokoli pokazí, i když uživatel zavře stránku uprostřed nahráván
 ### Stažení: `GET /api/assets/:id/download`
 
 1. Backend najde záznam; neexistující id → **404**.
-2. Otevře soubor v S3 a zvýší `downloadCount` o 1. `downloadCount` mění jen server.
+2. Otevře soubor v S3 a zvýší `downloadCount` o 1. `downloadCount` mění jen server. Když soubor v S3 chybí,
+   odpoví **404** `The file of this asset is missing`, jiná chyba S3 → **502**.
 3. Soubor **streamuje** do prohlížeče s hlavičkou `Content-Disposition: attachment; filename="<původní jméno>"`,
    takže se stáhne pod původním jménem, a s `X-Content-Type-Options: nosniff`, aby ho prohlížeč nikdy nezobrazil
    jako stránku.
 
-Ve frontendu stačí obyčejný odkaz: `<a href={downloadUrl(asset.id)}>Stáhnout</a>`.
+Ve frontendu stačí obyčejný odkaz s atributem `download`: `<a href={downloadUrl(asset.id)} download>Stáhnout</a>`.
+Chybová odpověď pak skončí jako nepovedené stažení v prohlížeči a stránka zůstane.
 
 ### Smazání: `DELETE /api/assets/:id`
 
@@ -265,9 +267,9 @@ nepovede, chyba se zapíše do logu služby catalog a záznam zůstane smazaný.
 | 401 | uživatel není přihlášený, token je neplatný nebo prošlý |
 | 403 | úprava cizího assetu, smazání cizího assetu (kromě admina), viz [Ochrana zápisu](#ochrana-zápisu) |
 | 400 | chybí `name` nebo `file`, neplatný `type`, nepovolená přípona, požadavek není `multipart/form-data` |
-| 404 | asset neexistuje (i neplatné id) |
+| 404 | asset neexistuje (i neplatné id), u stažení i chybějící soubor v S3 |
 | 413 | soubor je větší než `MAX_UPLOAD_MB` |
-| 502 | soubor se nepodařilo uložit do S3 |
+| 502 | soubor se nepodařilo uložit do S3 nebo z něj přečíst |
 | 507 | všechny soubory dohromady by překročily `MAX_STORAGE_GB` |
 | 503 | catalog nemá `JWT_PUBLIC_KEY`, takže nejde ověřit přihlášení |
 
@@ -305,7 +307,7 @@ Registraci a přihlášení dělá služba identity:
 |---|---|---|
 | `POST` | `/api/auth/register` | `{ username, email, password }` → **201** `{ id, username, email }`, obsazené jméno nebo e-mail → **409** |
 | `POST` | `/api/auth/login` | `{ email, password }` → nastaví cookies `access_token` a `refresh_token`, zablokovaný účet → **403** |
-| `GET` | `/api/auth/me` | přihlášený uživatel `{ user: { id, username, email, role, status } }` |
+| `GET` | `/api/auth/me` | přihlášený uživatel `{ user: { id, username, email, role, status } }`; bez jakékoli cookie session `{ user: null }` (**200**, nikdo není přihlášený), s neplatným nebo prošlým tokenem **401** |
 | `POST` | `/api/auth/refresh` | vymění refresh token za nový access token a nový refresh token |
 | `POST` | `/api/auth/logout` | zruší session a smaže obě cookies |
 
@@ -383,6 +385,7 @@ community ──GET /internal/assets/:id/exists──▶ catalog ──▶ datab
 | Služba | Cesta | Odpověď | Kdo volá |
 |---|---|---|---|
 | catalog | `GET /internal/assets/:id/exists` | `{ "exists": boolean }` | community |
+| identity | `GET /internal/users?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "id", "username" }] }`, neznámá id chybí | catalog (`ownerName`) |
 
 ### Nová interní cesta
 
@@ -492,14 +495,16 @@ připravená prázdná služba. Všechno se dá vyzkoušet v Postmanu, viz [Post
 | `GET` | `/api/tags?prefix=` | nápověda tagů a filtr (AM `tag/list`): nejvýš 10 tagů začínajících na `prefix` (bez ohledu na velikost písmen, nejvýš 50 znaků, jinak **400**), řazeno podle názvu: `{ itemList: [{ id, name }] }` |
 
 Asset v odpovědi (`services/catalog/src/views/asset.view.ts`). `ownerId` je id uživatele z identity (u starých
-assetů `null`). `ownerName`, `previewUrl` a `averageRating` jsou zatím `null`, `tagList` je `[]` a `reviewCount`
-je 0, dokud nejsou jména z identity, tagy, náhledy a recenze:
+assetů `null`), `ownerName` jeho uživatelské jméno: catalog se na jména ptá identity (`GET /internal/users`,
+viz [Komunikace mezi službami](#komunikace-mezi-službami)). Když identity neodpoví, je `ownerName` `null` a katalog
+funguje dál. `previewUrl` a `averageRating` jsou zatím `null`, `tagList` je `[]` a `reviewCount` je 0, dokud nejsou
+tagy, náhledy a recenze:
 
 ```json
 {
   "id": "1f628f53-d68c-47d0-b147-0f7b0386ad43",
   "ownerId": "29367033-ee56-41e2-a003-d463a556c47c",
-  "ownerName": null,
+  "ownerName": "pixel_smith",
   "name": "Medieval sword",
   "description": "Low poly",
   "type": "3d",

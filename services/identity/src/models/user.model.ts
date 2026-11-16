@@ -33,6 +33,14 @@ export const UserModel = {
     });
   },
 
+  // Usernames for other services (GET /internal/users).
+  async findUsernames(ids: string[]) {
+    return await prisma.user.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, username: true },
+    });
+  },
+
   async findPublicById(resLocalUserId: string) {
     return await prisma.user.findUnique({
       where: { id: resLocalUserId },

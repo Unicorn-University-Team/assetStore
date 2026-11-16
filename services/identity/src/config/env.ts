@@ -13,4 +13,6 @@ export const env = {
   jwtPublicKey: process.env.JWT_PUBLIC_KEY ?? '',
   // The server runs on HTTPS, so its cookies are sent only over HTTPS; locally it is plain HTTP.
   cookieSecure: nodeEnv === 'production',
+  // Shared secret that other services send in X-Internal-Key on /internal routes. Empty = not checked.
+  internalKey: process.env.INTERNAL_KEY ?? '',
 };

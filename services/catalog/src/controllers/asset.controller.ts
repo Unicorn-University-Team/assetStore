@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { pipeline } from 'node:stream/promises';
 import { env } from '../config/env';
 import { ALLOWED_EXTENSIONS, ASSET_TYPES, AssetModel, type Actor, type Asset, type AssetType } from '../models/asset.model';
+import { IdentityClient } from '../clients/identity.client';
 import { FileStorage } from '../storage/file-storage';
 import { HttpError } from '@assetstore/shared';
 import { receiveUpload } from '../utils/receiveUpload';
@@ -85,11 +86,13 @@ export const AssetController = {
     const pageSize = readInteger('pageSize', req.query.pageSize, 1, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE);
     const { items, total } = await AssetModel.findPage({ name: search, ownerId, pageIndex, pageSize });
 
-    res.json({ itemList: items.map(toAssetView), pageInfo: { pageIndex, pageSize, total } });
+    const ownerNames = await IdentityClient.usernames(items.map((asset) => asset.ownerId));
+    res.json({ itemList: items.map((asset) => toAssetView(asset, ownerNames)), pageInfo: { pageIndex, pageSize, total } });
   },
 
   async getById(req: Request<IdParams>, res: Response) {
-    res.json(toAssetView(await findAsset(req.params.id)));
+    const asset = await findAsset(req.params.id);
+    res.json(toAssetView(asset, await IdentityClient.usernames([asset.ownerId])));
   },
 
   // multipart/form-data: name, description, type, file
@@ -118,7 +121,7 @@ export const AssetController = {
         contentType: file.contentType,
       };
       const asset = await AssetModel.create(input, actor);
-      res.status(201).json(toAssetView(asset));
+      res.status(201).json(toAssetView(asset, await IdentityClient.usernames([asset.ownerId])));
     } catch (error) {
       await FileStorage.remove(file.key).catch(() => undefined);
       throw error;
@@ -133,7 +136,7 @@ export const AssetController = {
     const asset = UUID.test(req.params.id) ? await AssetModel.update(req.params.id, input, actor) : null;
     if (!asset) throw new HttpError(404, 'Asset not found');
 
-    res.json(toAssetView(asset));
+    res.json(toAssetView(asset, await IdentityClient.usernames([asset.ownerId])));
   },
 
   async remove(req: Request<IdParams>, res: Response) {
@@ -150,7 +153,12 @@ export const AssetController = {
 
   async download(req: Request<IdParams>, res: Response) {
     const asset = await findAsset(req.params.id);
-    const body = await FileStorage.download(asset.fileKey);
+    const body = await FileStorage.download(asset.fileKey).catch((error: unknown) => {
+      // The row exists but the file is gone from S3: say so instead of passing on the S3 error.
+      if ((error as { name?: unknown } | null)?.name === 'NoSuchKey') throw new HttpError(404, 'The file of this asset is missing');
+      console.error(error);
+      throw new HttpError(502, 'Could not read the file');
+    });
     await AssetModel.incrementDownloads(asset.id);
 
     res.attachment(asset.fileName);
