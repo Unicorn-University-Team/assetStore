@@ -5,6 +5,7 @@ import AssetGrid from '../components/AssetGrid'
 import InlineError from '../components/InlineError'
 import Pagination from '../components/Pagination'
 import SearchBar from '../components/SearchBar'
+import { useLiveTick } from '../useLiveTick'
 import { usePageTitle } from '../usePageTitle'
 
 export default function CatalogPage() {
@@ -16,27 +17,30 @@ export default function CatalogPage() {
   const request = `${page}:${search}`
   const [loaded, setLoaded] = useState<{ request: string; result: AssetPage | null; error: string } | null>(null)
   usePageTitle(search ? `“${search}” in the catalogue` : 'Catalogue')
+  // Download counts and new assets show up without a reload.
+  const tick = useLiveTick(30_000)
 
   useEffect(() => {
     const controller = new AbortController()
     listAssets(search, page, controller.signal)
       .then((result) => setLoaded({ request, result, error: '' }))
       .catch((cause: unknown) => {
-        if (!controller.signal.aborted) {
-          setLoaded({
-            request,
-            result: null,
-            error: cause instanceof Error ? cause.message : 'Could not load the catalogue.',
-          })
-        }
+        if (controller.signal.aborted) return
+        const error = cause instanceof Error ? cause.message : 'Could not load the catalogue.'
+        // A failed quiet refresh keeps the results already on the screen.
+        setLoaded((previous) => previous?.request === request && previous.result ? previous : { request, result: null, error })
       })
     return () => controller.abort()
-  }, [search, page, request])
+  }, [search, page, request, tick])
 
   const loading = loaded?.request !== request
-  const result = loading ? null : loaded.result
+  // While the next search or page loads, the previous results stay on the screen (dimmed) instead of a loading box,
+  // so the page does not jump with every letter typed.
+  const stale = loading && loaded?.result != null
+  const result = loading ? (loaded?.result ?? null) : loaded.result
   const error = loading ? '' : loaded.error
   const assets = result?.items ?? []
+  const showResults = !loading || stale
 
   function changeSearch(nextSearch: string) {
     const next = new URLSearchParams(params)
@@ -44,7 +48,8 @@ export default function CatalogPage() {
     if (trimmed) next.set('search', trimmed)
     else next.delete('search')
     next.delete('page')
-    setParams(next)
+    // Typing more letters replaces the history entry: Back goes to the page before the search, not to every letter.
+    setParams(next, { replace: Boolean(search && trimmed) })
   }
 
   function changePage(nextPage: number) {
@@ -64,7 +69,7 @@ export default function CatalogPage() {
       <div className="catalog-tools">
         <h1 className="catalog-title">Catalogue</h1>
         <SearchBar
-          key={search}
+          live
           id="catalog-search"
           placeholder="Search catalogue by name…"
           value={search}
@@ -84,9 +89,10 @@ export default function CatalogPage() {
           </button>
         </p>
       )}
-      {loading && <div className="state-box" role="status">Loading assets<span className="loading-dots">...</span></div>}
+      {loading && !stale && <div className="state-box" role="status">Loading assets<span className="loading-dots">...</span></div>}
       {!loading && error && <InlineError message={error} />}
-      {!loading && !error && !assets.length && (
+      <div className={stale ? 'live-results is-stale' : 'live-results'} aria-busy={stale}>
+      {showResults && !error && !assets.length && (
         <div className="state-box empty-state">
           <span className="empty-star">✳</span>
           {search ? (
@@ -113,10 +119,11 @@ export default function CatalogPage() {
           )}
         </div>
       )}
-      {!loading && !error && assets.length > 0 && <AssetGrid assets={assets} />}
-      {!loading && !error && result && (
+      {showResults && !error && assets.length > 0 && <AssetGrid assets={assets} />}
+      {showResults && !error && result && (
         <Pagination page={page} pageSize={result.pageSize} total={result.total} onChange={changePage} />
       )}
+      </div>
     </main>
   )
 }

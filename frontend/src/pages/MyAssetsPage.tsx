@@ -5,6 +5,7 @@ import { useAuth } from '../auth/auth-context'
 import AssetGrid from '../components/AssetGrid'
 import InlineError from '../components/InlineError'
 import Pagination from '../components/Pagination'
+import { useLiveTick } from '../useLiveTick'
 
 export default function MyAssetsPage() {
   const { user } = useAuth()
@@ -13,6 +14,8 @@ export default function MyAssetsPage() {
   const page = Math.max(1, Number(params.get('page') ?? '1') || 1)
   const request = `${ownerId}:${page}`
   const [loaded, setLoaded] = useState<{ request: string; result: AssetPage | null; error: string } | null>(null)
+  // Download counts of the user's assets stay current without a reload.
+  const tick = useLiveTick(30_000)
 
   useEffect(() => {
     if (!ownerId) return
@@ -20,16 +23,13 @@ export default function MyAssetsPage() {
     listMyAssets(ownerId, page, controller.signal)
       .then((result) => setLoaded({ request, result, error: '' }))
       .catch((cause: unknown) => {
-        if (!controller.signal.aborted) {
-          setLoaded({
-            request,
-            result: null,
-            error: cause instanceof Error ? cause.message : 'Could not load your assets.',
-          })
-        }
+        if (controller.signal.aborted) return
+        const error = cause instanceof Error ? cause.message : 'Could not load your assets.'
+        // A failed quiet refresh keeps the assets already on the screen.
+        setLoaded((previous) => previous?.request === request && previous.result ? previous : { request, result: null, error })
       })
     return () => controller.abort()
-  }, [ownerId, page, request])
+  }, [ownerId, page, request, tick])
 
   const loading = loaded?.request !== request
   const result = loading ? null : loaded.result

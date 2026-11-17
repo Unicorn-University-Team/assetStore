@@ -269,3 +269,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .admin-page { padding-top: 18px; padding-bottom: 55px; }.admin-heading h1 { font-size: 26px; }
   .report-facts div { grid-template-columns: 1fr; gap: 3px; }
 }
+
+/* Live data: a number that changed lights up for a moment; results of the previous search are dimmed while the
+   next ones load; the admin's open report count in the header. */
+.live-count.changed { display: inline-block; border-radius: 3px; animation: live-change 1.2s ease-out; }
+@keyframes live-change { from { color: #3355e0; background: #e4e9ff; transform: scale(1.15); } to { background: transparent; transform: none; } }
+.live-results { transition: opacity .15s; }
+.live-results.is-stale { opacity: .55; pointer-events: none; }
+.header-badge { display: inline-block; min-width: 18px; margin-left: 6px; padding: 1px 5px; border-radius: 9px; color: #111; background: #fff; font-size: 11px; font-weight: 700; text-align: center; }
+@media (prefers-reduced-motion: reduce) {
+  .live-count.changed { animation: none; }
+  .live-results { transition: none; }
+}

@@ -1,7 +1,29 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/auth-context'
+import { listReports } from '../api/reports'
+import LiveCount from '../components/LiveCount'
 import SearchBar from '../components/SearchBar'
+import { useLiveTick } from '../useLiveTick'
+
+// Number of open reports next to the admin's "Reports" link. Read again every minute, when the admin comes back to
+// the tab and after each page change (a decision on a report lowers it). Nothing is shown when it cannot be read.
+function OpenReportCount() {
+  const tick = useLiveTick(60_000)
+  const { pathname } = useLocation()
+  const [open, setOpen] = useState<number | null>(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    listReports('open', 1, controller.signal)
+      .then((page) => setOpen(page.total))
+      .catch(() => undefined)
+    return () => controller.abort()
+  }, [tick, pathname])
+
+  if (!open) return null
+  return <span className="header-badge" aria-label={`${open} open`}><LiveCount value={open} /></span>
+}
 
 function HeaderAccount() {
   const { user, status, logout } = useAuth()
@@ -21,7 +43,7 @@ function HeaderAccount() {
 
   return (
     <div className="header-account">
-      {user.role === 'ADMIN' && <Link className="header-login" to="/admin/reports">Reports</Link>}
+      {user.role === 'ADMIN' && <Link className="header-login" to="/admin/reports">Reports<OpenReportCount /></Link>}
       <span className="header-username">{user.username}</span>
       <button className="header-login" type="button" onClick={() => { void onLogout() }} disabled={busy}>Log out</button>
     </div>
