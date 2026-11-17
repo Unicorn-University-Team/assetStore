@@ -8,6 +8,8 @@ import AdminReportsPage from './pages/AdminReportsPage'
 import AssetDetailPage from './pages/AssetDetailPage'
 import AuthPage from './pages/AuthPage'
 import CatalogPage from './pages/CatalogPage'
+import MyAssetsPage from './pages/MyAssetsPage'
+import NewAssetPage from './pages/NewAssetPage'
 import ReportDetailPage from './pages/ReportDetailPage'
 import { usePageTitle } from './usePageTitle'
 
@@ -35,8 +37,11 @@ export default function App() {
             <Route path="assets/:id" element={<AssetDetailPage />} />
             <Route path="login" element={<AuthPage mode="login" />} />
             <Route path="register" element={<AuthPage mode="register" />} />
-            {/* /my is still a placeholder (the guard already sends anonymous visitors to /login); /admin needs the ADMIN role. */}
+            {/* /my: the owner's workspace; /admin needs the ADMIN role. */}
             <Route element={<RequireAuth />}>
+              <Route path="my" element={<Navigate to="/my/assets" replace />} />
+              <Route path="my/assets" element={<MyAssetsPage />} />
+              <Route path="my/assets/new" element={<NewAssetPage />} />
               <Route path="my/*" element={<NotFoundPage />} />
               <Route element={<RequireAdmin />}>
                 <Route path="admin" element={<Navigate to="/admin/reports" replace />} />
