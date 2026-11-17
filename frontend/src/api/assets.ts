@@ -53,14 +53,7 @@ type AssetListResponse = {
 // Keep the UI's one-based page model while translating the backend's zero-based API.
 export type AssetPage = { items: Asset[]; page: number; pageSize: number; total: number }
 
-export type NewAsset = {
-  name: string
-  description: string
-  type: AssetType
-  file: File
-  tags?: string[]
-  preview?: File | null
-}
+export type NewAsset = { name: string; description: string; type: AssetType; file: File }
 
 // The catalog API refuses a longer name search (400).
 export const SEARCH_MAX_LENGTH = 100
@@ -84,38 +77,30 @@ export async function listMyAssets(ownerId: string, page = 1, signal?: AbortSign
     pageIndex: String(Math.max(0, page - 1)),
     pageSize: String(pageSize),
   })
+  // The catalog filters by owner itself, so the total and the pages count only this user's assets.
   const response = await apiGet<AssetListResponse>(`/assets?${query}`, signal)
-  // The list endpoint does not store owners yet, so drop anything that is not this user's.
-  const items = response.itemList.filter((asset) => asset.ownerId === ownerId)
-  const filteredByServer = items.length === response.itemList.length
   return {
-    items,
+    items: response.itemList,
     page: response.pageInfo.pageIndex + 1,
     pageSize: response.pageInfo.pageSize,
-    total: filteredByServer ? response.pageInfo.total : items.length,
+    total: response.pageInfo.total,
   }
 }
 
-// Until there are user accounts, upload, edit and delete need the team's write key (README, Ochrana zápisu).
-function writeHeaders(writeKey: string): HeadersInit {
-  return writeKey ? { 'X-Write-Key': writeKey } : {}
-}
-
-export function uploadAsset(asset: NewAsset, writeKey = ''): Promise<Asset> {
+// Upload and delete need a logged-in user (the session cookie goes with every request).
+// The catalog does not store a preview or tags yet, so the form sends neither.
+export function uploadAsset(asset: NewAsset): Promise<Asset> {
   const form = new FormData()
-  // Text fields first. The asset file must be the first file part: the catalogue keeps a single file
-  // and ignores any file after it, so the preview has to follow the asset file.
+  // Text fields first, the file last.
   form.append('name', asset.name)
   form.append('description', asset.description)
   form.append('type', asset.type)
-  if (asset.tags?.length) form.append('tags', asset.tags.join(','))
   form.append('file', asset.file)
-  if (asset.preview) form.append('preview', asset.preview)
-  return apiPostForm<Asset>('/assets', form, writeHeaders(writeKey))
+  return apiPostForm<Asset>('/assets', form)
 }
 
-export function deleteAsset(id: string, writeKey: string): Promise<void> {
-  return apiDelete(`/assets/${id}`, writeHeaders(writeKey))
+export function deleteAsset(id: string): Promise<void> {
+  return apiDelete(`/assets/${id}`)
 }
 
 // A plain link is enough: the backend counts the download and sends the file as an attachment.
