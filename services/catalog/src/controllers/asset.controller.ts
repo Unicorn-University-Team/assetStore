@@ -5,6 +5,7 @@ import { ALLOWED_EXTENSIONS, ASSET_TYPES, AssetModel, type Actor, type Asset, ty
 import { IdentityClient } from '../clients/identity.client';
 import { FileStorage } from '../storage/file-storage';
 import { HttpError } from '@assetstore/shared';
+import { parseRange, previewContentType } from '../utils/preview';
 import { receiveUpload } from '../utils/receiveUpload';
 import { toAssetView } from '../views/asset.view';
 
@@ -72,6 +73,15 @@ async function findAsset(id: string): Promise<Asset> {
   const asset = UUID.test(id) ? await AssetModel.findById(id) : null;
   if (!asset) throw new HttpError(404, 'Asset not found');
   return asset;
+}
+
+// The file in S3; a missing file is a 404 with its own message, any other S3 error a 502.
+async function openFile(asset: Asset, range?: { start: number; end: number }) {
+  return FileStorage.download(asset.fileKey, range).catch((error: unknown) => {
+    if ((error as { name?: unknown } | null)?.name === 'NoSuchKey') throw new HttpError(404, 'The file of this asset is missing');
+    console.error(error);
+    throw new HttpError(502, 'Could not read the file');
+  });
 }
 
 function readActor(res: Response): Actor {
@@ -153,17 +163,41 @@ export const AssetController = {
 
   async download(req: Request<IdParams>, res: Response) {
     const asset = await findAsset(req.params.id);
-    const body = await FileStorage.download(asset.fileKey).catch((error: unknown) => {
-      // The row exists but the file is gone from S3: say so instead of passing on the S3 error.
-      if ((error as { name?: unknown } | null)?.name === 'NoSuchKey') throw new HttpError(404, 'The file of this asset is missing');
-      console.error(error);
-      throw new HttpError(502, 'Could not read the file');
-    });
+    const body = await openFile(asset);
     await AssetModel.incrementDownloads(asset.id);
 
     res.attachment(asset.fileName);
     res.setHeader('Content-Length', asset.fileSize);
     res.setHeader('X-Content-Type-Options', 'nosniff');
+    await pipeline(body, res);
+  },
+
+  // GET /api/assets/:id/file: the file for the preview on the asset page (README "Náhled"). Shown in the browser,
+  // not saved, and it does not count as a download. Only images, glTF models and sounds.
+  async preview(req: Request<IdParams>, res: Response) {
+    const asset = await findAsset(req.params.id);
+    const contentType = previewContentType(asset.fileName);
+    if (!contentType) throw new HttpError(404, 'This file type has no preview');
+
+    const range = parseRange(req.headers.range, asset.fileSize);
+    if (range === 'unsatisfiable') {
+      res.setHeader('Content-Range', `bytes */${asset.fileSize}`);
+      throw new HttpError(416, 'The requested range is outside the file');
+    }
+    const body = await openFile(asset, range ?? undefined);
+
+    res.status(range ? 206 : 200);
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Length', range ? range.end - range.start + 1 : asset.fileSize);
+    if (range) res.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${asset.fileSize}`);
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Content-Disposition', 'inline');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    // Opened directly in a tab, the file can never run a script; pictures, models and sounds load as usual.
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+    // The file of an asset never changes after the upload (PUT changes only name and description).
+    // private: the site may run behind SITE_AUTH.
+    res.setHeader('Cache-Control', 'private, max-age=3600');
     await pipeline(body, res);
   },
 };

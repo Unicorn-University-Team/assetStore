@@ -255,6 +255,32 @@ Když se cokoli pokazí, i když uživatel zavře stránku uprostřed nahráván
 Ve frontendu stačí obyčejný odkaz s atributem `download`: `<a href={downloadUrl(asset.id)} download>Stáhnout</a>`.
 Chybová odpověď pak skončí jako nepovedené stažení v prohlížeči a stránka zůstane.
 
+### Náhled: `GET /api/assets/:id/file`
+
+Soubor pro **zobrazení na stránce assetu**, ne ke stažení (podrobně `docs/asset-preview/spec.md`):
+
+| | `/download` | `/file` |
+|---|---|---|
+| `downloadCount` | +1 | beze změny |
+| `Content-Disposition` | `attachment` | `inline` |
+| Které soubory | všechny | jen `png jpg jpeg webp gif`, `glb gltf`, `wav mp3 ogg flac`, jinak **404** `This file type has no preview` |
+
+- `Content-Type` je podle přípony z pevné tabulky (`services/catalog/src/utils/preview.ts`), ne od uživatele. SVG ani
+  HTML na seznamu nejsou.
+- Hlavičky `X-Content-Type-Options: nosniff` a `Content-Security-Policy: default-src 'none'; sandbox`: soubor otevřený
+  přímo v okně nespustí skript.
+- **Range** (`Range: bytes=0-99` → **206** + `Content-Range`, mimo soubor → **416**): přehrávač zvuku přetáčí,
+  rozsah jde rovnou do S3.
+- `Cache-Control: private, max-age=3600`: soubor assetu se po nahrání nemění.
+- `previewUrl` v assetu je tahle adresa pro obrázky do 5 MB (karty v katalogu), jinak `null`.
+
+Ve frontendu ho používá `components/AssetPreview.tsx`:
+- **obrázek:** `<img>`;
+- **3D:** `<model-viewer>` (otáčení myší, zoom). Knihovna se stahuje jen na stránce 3D assetu, model nad 20 MB až na
+  tlačítko;
+- **zvuk:** `<audio>`;
+- **ostatní:** kreslený obal.
+
 ### Smazání: `DELETE /api/assets/:id`
 
 Smazat smí vlastník assetu nebo admin, ostatní dostanou **403**. Nejdřív se smaže záznam v databázi, takže asset hned zmizí z katalogu, potom soubor v S3. Když se smazání v S3
@@ -518,13 +544,14 @@ Endpointy mají **catalog** (assety), **identity** (přihlášení, viz [Přihl�
 | `PUT` | `/api/assets/:id` | JSON `{ name, description }`, soubor se nemění; jen vlastník, jinak **403** |
 | `DELETE` | `/api/assets/:id` | smaže záznam i soubor; jen vlastník nebo admin, jinak **403** |
 | `GET` | `/api/assets/:id/download` | stažení souboru, `downloadCount` + 1 |
+| `GET` | `/api/assets/:id/file` | soubor pro náhled (obrázek, glTF, zvuk), `inline`, Range, `downloadCount` beze změny; jiný formát **404** |
 | `GET` | `/api/tags?prefix=` | nápověda tagů a filtr (AM `tag/list`): nejvýš 10 tagů začínajících na `prefix` (bez ohledu na velikost písmen, nejvýš 50 znaků, jinak **400**), řazeno podle názvu: `{ itemList: [{ id, name }] }` |
 
 Asset v odpovědi (`services/catalog/src/views/asset.view.ts`). `ownerId` je id uživatele z identity (u starých
 assetů `null`), `ownerName` jeho uživatelské jméno: catalog se na jména ptá identity (`GET /internal/users`,
 viz [Komunikace mezi službami](#komunikace-mezi-službami)). Když identity neodpoví, je `ownerName` `null` a katalog
-funguje dál. `previewUrl` a `averageRating` jsou zatím `null`, `tagList` je `[]` a `reviewCount` je 0, dokud nejsou
-tagy, náhledy a recenze:
+funguje dál. `previewUrl` je adresa náhledu u obrázků do 5 MB (jinak `null`, viz [Náhled](#náhled-get-apiassetsidfile)).
+`averageRating` je zatím `null`, `tagList` je `[]` a `reviewCount` je 0, dokud nejsou tagy a recenze:
 
 ```json
 {
