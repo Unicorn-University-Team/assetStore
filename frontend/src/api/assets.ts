@@ -62,6 +62,9 @@ export type NewAsset = {
   preview?: File | null
 }
 
+// The catalog API refuses a longer name search (400).
+export const SEARCH_MAX_LENGTH = 100
+
 export async function listAssets(search = '', page = 1, signal?: AbortSignal): Promise<AssetPage> {
   const pageSize = 20
   const query = new URLSearchParams({ name: search, pageIndex: String(Math.max(0, page - 1)), pageSize: String(pageSize) })

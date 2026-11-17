@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { SEARCH_MAX_LENGTH } from '../api/assets'
 
 type SearchBarProps = {
   value: string
@@ -28,6 +29,7 @@ export default function SearchBar({
         type="search"
         placeholder={placeholder}
         value={draft}
+        maxLength={SEARCH_MAX_LENGTH}
         onChange={(event) => setDraft(event.target.value)}
       />
       {draft && (

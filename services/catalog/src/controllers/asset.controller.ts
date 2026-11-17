@@ -1,7 +1,8 @@
 import type { Request, Response } from 'express';
 import { pipeline } from 'node:stream/promises';
 import { env } from '../config/env';
-import { ALLOWED_EXTENSIONS, ASSET_TYPES, AssetModel, type Asset, type AssetType } from '../models/asset.model';
+import { ALLOWED_EXTENSIONS, ASSET_TYPES, AssetModel, type Actor, type Asset, type AssetType } from '../models/asset.model';
+import { IdentityClient } from '../clients/identity.client';
 import { FileStorage } from '../storage/file-storage';
 import { HttpError } from '@assetstore/shared';
 import { receiveUpload } from '../utils/receiveUpload';
@@ -47,6 +48,13 @@ function readSearchName(value: unknown): string {
   return value.trim();
 }
 
+// asset/list filter by owner ("My assets"): optional user id from identity.
+function readOwnerId(value: unknown): string | null {
+  if (value === undefined) return null;
+  if (typeof value !== 'string' || !UUID.test(value)) throw new HttpError(400, '"ownerId" must be a uuid');
+  return value.toLowerCase();
+}
+
 // Whole number from the query string (always a string there, or an array if the parameter is repeated).
 // max = null means no upper limit.
 function readInteger(field: string, value: unknown, min: number, max: number | null, fallback: number): number {
@@ -66,18 +74,25 @@ async function findAsset(id: string): Promise<Asset> {
   return asset;
 }
 
+function readActor(res: Response): Actor {
+  return { id: res.locals.userId as string, role: res.locals.role as Actor['role'] };
+}
+
 export const AssetController = {
   async list(req: Request, res: Response) {
     const search = readSearchName(req.query.name);
+    const ownerId = readOwnerId(req.query.ownerId);
     const pageIndex = readInteger('pageIndex', req.query.pageIndex, 0, null, 0);
     const pageSize = readInteger('pageSize', req.query.pageSize, 1, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE);
-    const { items, total } = await AssetModel.findPage({ name: search, pageIndex, pageSize });
+    const { items, total } = await AssetModel.findPage({ name: search, ownerId, pageIndex, pageSize });
 
-    res.json({ itemList: items.map(toAssetView), pageInfo: { pageIndex, pageSize, total } });
+    const ownerNames = await IdentityClient.usernames(items.map((asset) => asset.ownerId));
+    res.json({ itemList: items.map((asset) => toAssetView(asset, ownerNames)), pageInfo: { pageIndex, pageSize, total } });
   },
 
   async getById(req: Request<IdParams>, res: Response) {
-    res.json(toAssetView(await findAsset(req.params.id)));
+    const asset = await findAsset(req.params.id);
+    res.json(toAssetView(asset, await IdentityClient.usernames([asset.ownerId])));
   },
 
   // multipart/form-data: name, description, type, file
@@ -85,7 +100,7 @@ export const AssetController = {
     // Refuse before reading the body when the storage is already full.
     if ((await AssetModel.totalFileSize()) >= STORAGE_LIMIT_BYTES) throw storageFull();
 
-    const actorId: string = res.locals.userId;
+    const actor = readActor(res);
 
     const { fields, file } = await receiveUpload(req, {
       fileField: 'file',
@@ -105,8 +120,8 @@ export const AssetController = {
         fileSize: file.size,
         contentType: file.contentType,
       };
-      const asset = await AssetModel.create(input, actorId);
-      res.status(201).json(toAssetView(asset));
+      const asset = await AssetModel.create(input, actor);
+      res.status(201).json(toAssetView(asset, await IdentityClient.usernames([asset.ownerId])));
     } catch (error) {
       await FileStorage.remove(file.key).catch(() => undefined);
       throw error;
@@ -115,18 +130,18 @@ export const AssetController = {
 
   // JSON: name, description. The file itself is not replaced.
   async update(req: Request<IdParams>, res: Response) {
-    const actorId: string = res.locals.userId;
+    const actor = readActor(res);
     const body = (req.body ?? {}) as { name?: unknown; description?: unknown };
     const input = { name: readName(body.name), description: readDescription(body.description) };
-    const asset = UUID.test(req.params.id) ? await AssetModel.update(req.params.id, input, actorId) : null;
+    const asset = UUID.test(req.params.id) ? await AssetModel.update(req.params.id, input, actor) : null;
     if (!asset) throw new HttpError(404, 'Asset not found');
 
-    res.json(toAssetView(asset));
+    res.json(toAssetView(asset, await IdentityClient.usernames([asset.ownerId])));
   },
 
   async remove(req: Request<IdParams>, res: Response) {
-    const actorId: string = res.locals.userId;
-    const asset = UUID.test(req.params.id) ? await AssetModel.remove(req.params.id, actorId) : null;
+    const actor = readActor(res);
+    const asset = UUID.test(req.params.id) ? await AssetModel.remove(req.params.id, actor) : null;
     if (!asset) throw new HttpError(404, 'Asset not found');
 
     // The database row is gone already; a leftover file only costs storage, so log and carry on.
@@ -138,7 +153,12 @@ export const AssetController = {
 
   async download(req: Request<IdParams>, res: Response) {
     const asset = await findAsset(req.params.id);
-    const body = await FileStorage.download(asset.fileKey);
+    const body = await FileStorage.download(asset.fileKey).catch((error: unknown) => {
+      // The row exists but the file is gone from S3: say so instead of passing on the S3 error.
+      if ((error as { name?: unknown } | null)?.name === 'NoSuchKey') throw new HttpError(404, 'The file of this asset is missing');
+      console.error(error);
+      throw new HttpError(502, 'Could not read the file');
+    });
     await AssetModel.incrementDownloads(asset.id);
 
     res.attachment(asset.fileName);

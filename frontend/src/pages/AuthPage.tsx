@@ -1,17 +1,18 @@
 import { useCallback, useState, type FormEvent } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { apiPost } from '../api/client'
 import { useAuth } from '../auth/auth-context'
 import ConfirmDialog from '../components/ConfirmDialog'
 import FormField from '../components/FormField'
 import InlineError from '../components/InlineError'
+import { usePageTitle } from '../usePageTitle'
 
 type AuthMode = 'login' | 'register'
 
 export default function AuthPage({ mode }: { mode: AuthMode }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { refreshUser } = useAuth()
+  const { user, status, refreshUser } = useAuth()
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -19,6 +20,7 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
   const [busy, setBusy] = useState(false)
   const [discardPath, setDiscardPath] = useState<string | null>(null)
   const isRegister = mode === 'register'
+  usePageTitle(isRegister ? 'Create account' : 'Log in')
 
   function leave(path: string) {
     if (username || email || password) setDiscardPath(path)
@@ -57,6 +59,9 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
       setBusy(false)
     }
   }
+
+  // Already logged in: nothing to do here. Not while this form is logging in, it navigates on its own.
+  if (status === 'ready' && user && !busy) return <Navigate to={pathAfterAuth(location.state)} replace />
 
   return (
     <main className="auth-page">

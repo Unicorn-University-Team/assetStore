@@ -23,6 +23,10 @@
       "key": "assetId",
       "value": "",
       "description": "Filled by Assets / List and Assets / Create"
+    },
+    {
+      "key": "reportId",
+      "value": ""
     }
   ],
   "item": [
@@ -239,7 +243,7 @@
                 "me"
               ]
             },
-            "description": "The signed-in user. 401 without a valid access token: call Refresh or Login."
+            "description": "The signed-in user. No session cookie at all: 200 { user: null }. Invalid or expired access token: 401, call Refresh or Login."
           }
         },
         {
@@ -339,6 +343,12 @@
                   "key": "name",
                   "value": "",
                   "description": "Part of the name, any letter case, at most 100 characters"
+                },
+                {
+                  "key": "ownerId",
+                  "value": "",
+                  "description": "Only this user's assets (id from Auth → Me)",
+                  "disabled": true
                 },
                 {
                   "key": "pageIndex",
@@ -585,6 +595,161 @@
             },
             "description": "At most 10 tags starting with the prefix, sorted by name."
           }
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "Create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/assets/{{assetId}}/reports",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "assets",
+                "{{assetId}}",
+                "reports"
+              ]
+            },
+            "description": "Report the asset in assetId (Assets → List sets it). Needs Login. reason: copyright | inappropriate | malware | spam | other; comment at most 500 characters. Own asset 403, second open report 409.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"spam\",\n  \"comment\": \"\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) pm.collectionVariables.set('reportId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List (admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/reports?status=open&pageIndex=0&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reports"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "open",
+                  "description": "open (default), resolved, rejected or all"
+                },
+                {
+                  "key": "pageIndex",
+                  "value": "0",
+                  "description": "Page number from 0"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "description": "1 to 100"
+                }
+              ]
+            },
+            "description": "Reports newest first. Needs Login as an admin, otherwise 403."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const items = pm.response.json().itemList || [];",
+                  "if (items.length) pm.collectionVariables.set('reportId', items[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get (admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/reports/{{reportId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reports",
+                "{{reportId}}"
+              ]
+            },
+            "description": "One report with asset, owner and author names."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject (admin)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/reports/{{reportId}}/reject",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reports",
+                "{{reportId}}",
+                "reject"
+              ]
+            },
+            "description": "US-7: open → rejected. A report that is not open any more answers 409."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
         }
       ]
     }

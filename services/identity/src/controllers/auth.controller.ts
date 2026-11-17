@@ -1,4 +1,4 @@
-import type { Request, Response } from "express";
+import type { NextFunction, Request, Response } from "express";
 import { UserModel } from "../models/user.model";
 import { SessionModel } from "../models/session.model";
 import { Prisma } from "../generated/prisma/client";
@@ -146,6 +146,15 @@ export const AuthController = {
       })
       .status(200)
       .json({ message: "Login successful." });
+  },
+
+  // A visitor without any session cookie is simply not logged in: 200 { user: null } instead of 401, so the
+  // frontend does not try a refresh and the browser console stays free of errors. With a cookie, requireAuth decides.
+  noSession(req: Request, res: Response, next: NextFunction) {
+    if (!req.cookies?.access_token && !req.cookies?.refresh_token) {
+      return res.status(200).json({ user: null });
+    }
+    next();
   },
 
   async me(req: Request, res: Response) {

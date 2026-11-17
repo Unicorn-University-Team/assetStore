@@ -19,11 +19,12 @@ export interface AssetView {
   updatedAt: string;
 }
 
-export function toAssetView(asset: Asset): AssetView {
+// ownerNames: username by user id from identity (IdentityClient.usernames). Missing = ownerName null.
+export function toAssetView(asset: Asset, ownerNames: ReadonlyMap<string, string> = new Map()): AssetView {
   return {
     id: asset.id,
-    ownerId: null,
-    ownerName: null,
+    ownerId: asset.ownerId,
+    ownerName: (asset.ownerId && ownerNames.get(asset.ownerId)) ?? null,
     name: asset.name,
     description: asset.description,
     type: asset.type,

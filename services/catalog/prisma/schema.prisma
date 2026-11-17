@@ -13,6 +13,7 @@ datasource db {
 
 model Asset {
   id            String   @id @default(uuid()) @db.Uuid
+  ownerId       String?  @map("owner_id") @db.Uuid
   name          String   @db.VarChar(100)
   description   String   @default("")
   // 2d | 3d | map | sound | environment, checked in the controller
@@ -26,6 +27,7 @@ model Asset {
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
+  @@index([ownerId])
   @@map("asset")
 }
 
@@ -41,7 +43,7 @@ model Tag {
 // same columns. Rows are only ever added: never updated or deleted.
 model AuditLog {
   id         String   @id @default(uuid()) @db.Uuid
-  // Empty until catalog knows the logged-in user (the token check is not in packages/shared yet).
+  // The logged-in user from the access token. Empty for entries written before writes required a login.
   actorId    String?  @map("actor_id") @db.Uuid
   // assetCreated | assetUpdated | assetDeleted, checked in AuditLogModel
   action     String   @db.VarChar(30)
