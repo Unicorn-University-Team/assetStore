@@ -5,6 +5,7 @@ import InlineError from '../components/InlineError'
 import Pagination from '../components/Pagination'
 import ReportStatusBadge from '../components/ReportStatusBadge'
 import { formatDateTime } from '../formatDate'
+import { useLiveTick } from '../useLiveTick'
 import { usePageTitle } from '../usePageTitle'
 
 const FILTERS: { value: ReportStatusFilter; label: string }[] = [
@@ -36,6 +37,8 @@ export default function AdminReportsPage() {
   const [notice, setNotice] = useState(() => readNotice(location.state))
   const handedNotice = readNotice(location.state)
   usePageTitle('Reports')
+  // New reports from users show up without a reload.
+  const tick = useLiveTick(30_000)
 
   useEffect(() => {
     if (handedNotice) navigate(location.pathname + location.search, { replace: true, state: null })
@@ -46,12 +49,13 @@ export default function AdminReportsPage() {
     listReports(status, page, controller.signal)
       .then((result) => setLoaded({ request, result, error: '' }))
       .catch((cause: unknown) => {
-        if (!controller.signal.aborted) {
-          setLoaded({ request, result: null, error: cause instanceof Error ? cause.message : 'Could not load the reports.' })
-        }
+        if (controller.signal.aborted) return
+        const error = cause instanceof Error ? cause.message : 'Could not load the reports.'
+        // A failed quiet refresh keeps the reports already on the screen.
+        setLoaded((previous) => previous?.request === request && previous.result ? previous : { request, result: null, error })
       })
     return () => controller.abort()
-  }, [status, page, request])
+  }, [status, page, request, tick])
 
   const loading = loaded?.request !== request
   const result = loading ? null : loaded.result
