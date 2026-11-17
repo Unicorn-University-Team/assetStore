@@ -12,18 +12,45 @@ datasource db {
   provider = "postgresql"
 }
 
-enum ReportReason{
-  inappropriateContent
-  copyright
-  spam
-  brokenFile
-  other
+// A user's report of an asset (REP-1…3): US-5 report, US-6 accept, US-7 deny. Asset and users live in other
+// services, so only their ids are stored here; names come from catalog and identity when reports are read.
+model Report {
+  id           String    @id @default(uuid()) @db.Uuid
+  assetId      String    @map("asset_id") @db.Uuid
+  // Owner of the asset when it was reported (from catalog); stays known even after the asset is deleted.
+  assetOwnerId String?   @map("asset_owner_id") @db.Uuid
+  // Who reported it.
+  authorId     String    @map("author_id") @db.Uuid
+  // copyright | inappropriate | malware | spam | other (REPORT_REASONS in ReportModel, CHECK in the migration)
+  reason       String    @db.VarChar(20)
+  comment      String    @default("") @db.VarChar(500)
+  // open | resolved | rejected (CHECK in the migration)
+  status       String    @default("open") @db.VarChar(10)
+  // The admin who accepted or denied the report, and when.
+  decidedBy    String?   @map("decided_by") @db.Uuid
+  decidedAt    DateTime? @map("decided_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@index([status, createdAt])
+  @@index([assetId, authorId])
+  @@map("report")
 }
 
-enum ReportStatus {
-  open
-  resolved // = accepted
-  rejected
+// A user's review of an asset: a rating 1–5 (CHECK in the add_review migration) and an optional comment. One review
+// per user and asset. The asset and the user live in other services, so only their ids are stored here.
+model Review {
+  id        String   @id @default(uuid()) @db.Uuid
+  assetId   String   @map("asset_id") @db.Uuid
+  authorId  String   @map("author_id") @db.Uuid
+  rating    Int
+  comment   String?  @db.VarChar(2000)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([authorId, assetId])
+  @@index([assetId])
+  @@index([createdAt])
+  @@map("review")
 }
 
 // Audit log (README, Audit log): who did what to which object and when. Each service keeps its own table with the
@@ -31,7 +58,6 @@ enum ReportStatus {
 model AuditLog {
   id         String   @id @default(uuid()) @db.Uuid
   // Empty until the service knows the logged-in user (the token check is not in packages/shared yet).
-  // token check is already in packages/shared
   actorId    String?  @map("actor_id") @db.Uuid
   action     String   @db.VarChar(30)
   objectType String   @map("object_type") @db.VarChar(20)
@@ -44,36 +70,4 @@ model AuditLog {
   @@index([actorId])
   @@index([createdAt])
   @@map("audit_log")
-}
-
-
-model Review {
-  id String @id @default(uuid()) @db.Uuid
-  assetId String @db.Uuid @map("asset_id")
-  authorId String @db.Uuid @map("author_id")
-  rating Int
-  comment String? @db.VarChar(2000)
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@unique([authorId, assetId])
-  @@index([createdAt])
-  @@index([assetId])
-  @@map("review")
-}
-
-model Report {
-  id String @id @default(uuid()) @db.Uuid
-  assetId String @db.Uuid @map("asset_id")
-  assetName String @map("asset_name")// need for the history
-  assetOwnerId String @db.Uuid @map("asset_owner_id")
-  authorId String @db.Uuid @map("author_id")
-  reason ReportReason
-  status ReportStatus @default(open)
-  createdAt DateTime @default(now()) @map("created_at")
-  decidedAt DateTime? @map("decided_at") //time when admin accepted or rejected
-  decidedById String? @db.Uuid @map("decided_by_id")//admin ID
-  
-  @@index([assetOwnerId, status])
-  @@index([assetId])
-  @@map("report")
 }

@@ -2,8 +2,10 @@ import type { Request, Response } from 'express';
 import { pipeline } from 'node:stream/promises';
 import { env } from '../config/env';
 import { ALLOWED_EXTENSIONS, ASSET_TYPES, AssetModel, type Actor, type Asset, type AssetType } from '../models/asset.model';
+import { IdentityClient } from '../clients/identity.client';
 import { FileStorage } from '../storage/file-storage';
 import { HttpError } from '@assetstore/shared';
+import { parseRange, previewContentType } from '../utils/preview';
 import { receiveUpload } from '../utils/receiveUpload';
 import { toAssetView } from '../views/asset.view';
 
@@ -73,6 +75,15 @@ async function findAsset(id: string): Promise<Asset> {
   return asset;
 }
 
+// The file in S3; a missing file is a 404 with its own message, any other S3 error a 502.
+async function openFile(asset: Asset, range?: { start: number; end: number }) {
+  return FileStorage.download(asset.fileKey, range).catch((error: unknown) => {
+    if ((error as { name?: unknown } | null)?.name === 'NoSuchKey') throw new HttpError(404, 'The file of this asset is missing');
+    console.error(error);
+    throw new HttpError(502, 'Could not read the file');
+  });
+}
+
 function readActor(res: Response): Actor {
   return { id: res.locals.userId as string, role: res.locals.role as Actor['role'] };
 }
@@ -85,11 +96,13 @@ export const AssetController = {
     const pageSize = readInteger('pageSize', req.query.pageSize, 1, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE);
     const { items, total } = await AssetModel.findPage({ name: search, ownerId, pageIndex, pageSize });
 
-    res.json({ itemList: items.map(toAssetView), pageInfo: { pageIndex, pageSize, total } });
+    const ownerNames = await IdentityClient.usernames(items.map((asset) => asset.ownerId));
+    res.json({ itemList: items.map((asset) => toAssetView(asset, ownerNames)), pageInfo: { pageIndex, pageSize, total } });
   },
 
   async getById(req: Request<IdParams>, res: Response) {
-    res.json(toAssetView(await findAsset(req.params.id)));
+    const asset = await findAsset(req.params.id);
+    res.json(toAssetView(asset, await IdentityClient.usernames([asset.ownerId])));
   },
 
   // multipart/form-data: name, description, type, file
@@ -118,7 +131,7 @@ export const AssetController = {
         contentType: file.contentType,
       };
       const asset = await AssetModel.create(input, actor);
-      res.status(201).json(toAssetView(asset));
+      res.status(201).json(toAssetView(asset, await IdentityClient.usernames([asset.ownerId])));
     } catch (error) {
       await FileStorage.remove(file.key).catch(() => undefined);
       throw error;
@@ -133,7 +146,7 @@ export const AssetController = {
     const asset = UUID.test(req.params.id) ? await AssetModel.update(req.params.id, input, actor) : null;
     if (!asset) throw new HttpError(404, 'Asset not found');
 
-    res.json(toAssetView(asset));
+    res.json(toAssetView(asset, await IdentityClient.usernames([asset.ownerId])));
   },
 
   async remove(req: Request<IdParams>, res: Response) {
@@ -150,12 +163,41 @@ export const AssetController = {
 
   async download(req: Request<IdParams>, res: Response) {
     const asset = await findAsset(req.params.id);
-    const body = await FileStorage.download(asset.fileKey);
+    const body = await openFile(asset);
     await AssetModel.incrementDownloads(asset.id);
 
     res.attachment(asset.fileName);
     res.setHeader('Content-Length', asset.fileSize);
     res.setHeader('X-Content-Type-Options', 'nosniff');
+    await pipeline(body, res);
+  },
+
+  // GET /api/assets/:id/file: the file for the preview on the asset page (README "Náhled"). Shown in the browser,
+  // not saved, and it does not count as a download. Only images, glTF models and sounds.
+  async preview(req: Request<IdParams>, res: Response) {
+    const asset = await findAsset(req.params.id);
+    const contentType = previewContentType(asset.fileName);
+    if (!contentType) throw new HttpError(404, 'This file type has no preview');
+
+    const range = parseRange(req.headers.range, asset.fileSize);
+    if (range === 'unsatisfiable') {
+      res.setHeader('Content-Range', `bytes */${asset.fileSize}`);
+      throw new HttpError(416, 'The requested range is outside the file');
+    }
+    const body = await openFile(asset, range ?? undefined);
+
+    res.status(range ? 206 : 200);
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Length', range ? range.end - range.start + 1 : asset.fileSize);
+    if (range) res.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${asset.fileSize}`);
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Content-Disposition', 'inline');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    // Opened directly in a tab, the file can never run a script; pictures, models and sounds load as usual.
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+    // The file of an asset never changes after the upload (PUT changes only name and description).
+    // private: the site may run behind SITE_AUTH.
+    res.setHeader('Cache-Control', 'private, max-age=3600');
     await pipeline(body, res);
   },
 };

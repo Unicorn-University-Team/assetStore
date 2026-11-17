@@ -1,4 +1,5 @@
 import type { Asset } from '../models/asset.model';
+import { cardPreviewUrl } from '../utils/preview';
 
 // What the client sees (AM asset/list dtoOut item). The S3 key (fileKey) is internal and never leaves the backend.
 export interface AssetView {
@@ -19,18 +20,20 @@ export interface AssetView {
   updatedAt: string;
 }
 
-export function toAssetView(asset: Asset): AssetView {
+// ownerNames: username by user id from identity (IdentityClient.usernames). Missing = ownerName null.
+export function toAssetView(asset: Asset, ownerNames: ReadonlyMap<string, string> = new Map()): AssetView {
   return {
     id: asset.id,
     ownerId: asset.ownerId,
-    ownerName: null,
+    ownerName: (asset.ownerId && ownerNames.get(asset.ownerId)) ?? null,
     name: asset.name,
     description: asset.description,
     type: asset.type,
     tagList: [],
     fileName: asset.fileName,
     fileSize: asset.fileSize,
-    previewUrl: null,
+    // Small images are their own preview (GET /api/assets/:id/file); other types have none yet.
+    previewUrl: cardPreviewUrl(asset),
     downloadCount: asset.downloadCount,
     averageRating: null,
     reviewCount: 0,

@@ -1,7 +1,9 @@
-import { errorHandler, notFound } from "@assetstore/shared";
+import { errorHandler, notFound, requireInternalKey } from "@assetstore/shared";
 import express from "express";
 import { prisma } from "./db/prisma";
 import { router } from "./routes/auth.routes";
+import { internalRoutes } from "./routes/internal.routes";
+import { env } from "./config/env";
 import cookieParser from "cookie-parser";
 
 export const app = express();
@@ -26,5 +28,7 @@ app.get("/health", async (_req, res) => {
 //   /api/auth/...   registration, login, logout, current user
 //   /api/users/...  user list and deletion (admin)
 app.use("/api/auth", router);
+// For other services only (README, Komunikace mezi službami).
+app.use("/internal", requireInternalKey(env.internalKey), internalRoutes);
 app.use(notFound);
 app.use(errorHandler);

@@ -1,19 +1,25 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom'
 import './App.css'
 import { AuthProvider } from './auth/AuthProvider'
+import { RequireAdmin } from './auth/RequireAdmin'
 import { RequireAuth } from './auth/RequireAuth'
 import MainLayout from './layouts/MainLayout'
+import AdminReportsPage from './pages/AdminReportsPage'
 import AssetDetailPage from './pages/AssetDetailPage'
 import AuthPage from './pages/AuthPage'
 import CatalogPage from './pages/CatalogPage'
-import MockupAssetPage from './pages/MockupAssetPage'
+import ReportDetailPage from './pages/ReportDetailPage'
+import { usePageTitle } from './usePageTitle'
 
 function NotFoundPage() {
+  usePageTitle('Page not found')
   return (
-    <main className="content-width state-box empty-state">
-      <h1>Page not found</h1>
-      <p>The page you requested does not exist.</p>
-      <a className="button button-primary" href="/">Back to the catalog</a>
+    <main className="content-width page-state">
+      <div className="state-box empty-state">
+        <h1>Page not found</h1>
+        <p>The page you requested does not exist.</p>
+        <Link className="button button-primary" to="/">Back to the catalogue</Link>
+      </div>
     </main>
   )
 }
@@ -29,11 +35,15 @@ export default function App() {
             <Route path="assets/:id" element={<AssetDetailPage />} />
             <Route path="login" element={<AuthPage mode="login" />} />
             <Route path="register" element={<AuthPage mode="register" />} />
-            <Route path="asset-mockup" element={<MockupAssetPage />} />
-            {/* Real /my and /admin pages replace these placeholders; the guard already sends anonymous visitors to /login. */}
+            {/* /my is still a placeholder (the guard already sends anonymous visitors to /login); /admin needs the ADMIN role. */}
             <Route element={<RequireAuth />}>
               <Route path="my/*" element={<NotFoundPage />} />
-              <Route path="admin/*" element={<NotFoundPage />} />
+              <Route element={<RequireAdmin />}>
+                <Route path="admin" element={<Navigate to="/admin/reports" replace />} />
+                <Route path="admin/reports" element={<AdminReportsPage />} />
+                <Route path="admin/reports/:id" element={<ReportDetailPage />} />
+                <Route path="admin/*" element={<NotFoundPage />} />
+              </Route>
             </Route>
             <Route path="*" element={<NotFoundPage />} />
           </Route>

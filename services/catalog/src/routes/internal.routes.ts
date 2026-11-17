@@ -5,4 +5,5 @@ import { InternalController } from '../controllers/internal.controller';
 // requireInternalKey in front of them.
 export const internalRoutes = Router();
 
+internalRoutes.get('/assets', InternalController.summaries);
 internalRoutes.get('/assets/:id/exists', InternalController.assetExists);
