@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { apiGet } from '../api/client'
 import type { Asset } from '../api/assets'
+import AssetPreview from '../components/AssetPreview'
 import InlineError from '../components/InlineError'
 import ReportAsset from '../components/ReportAsset'
 import { usePageTitle } from '../usePageTitle'
@@ -62,9 +63,7 @@ export default function AssetDetailPage() {
       <div className="asset-detail-layout">
         <section className="asset-main-column">
           <div className="detail-cover">
-            {asset.previewUrl
-              ? <img className="detail-preview" src={asset.previewUrl} alt={`${asset.name} preview`} />
-              : <><span className="detail-shape shape-a"/><span className="detail-shape shape-b"/><span className="detail-shape shape-c"/><span className="detail-cover-name">{asset.name.slice(0, 1).toUpperCase()}</span></>}
+            <AssetPreview key={asset.id} asset={asset} fallback={<><span className="detail-shape shape-a"/><span className="detail-shape shape-b"/><span className="detail-shape shape-c"/><span className="detail-cover-name">{asset.name.slice(0, 1).toUpperCase()}</span></>} />
             <span className="detail-cover-type">{typeName}</span>
           </div>
           <div className="detail-tabs"><button type="button" className={section === 'overview' ? 'active' : undefined} onClick={() => showSection('overview')}>Overview</button><button type="button" className={section === 'reviews' ? 'active' : undefined} onClick={() => showSection('reviews')}>Reviews ({asset.reviewCount})</button></div>

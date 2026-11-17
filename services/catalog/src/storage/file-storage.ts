@@ -19,8 +19,10 @@ export const FileStorage = {
     return new Upload({ client: s3, params: { Bucket, Key: key, Body: body, ContentType: contentType } });
   },
 
-  async download(key: string): Promise<Readable> {
-    const object = await s3.send(new GetObjectCommand({ Bucket, Key: key }));
+  // range: only these bytes (inclusive), for previews that seek (GET /api/assets/:id/file).
+  async download(key: string, range?: { start: number; end: number }): Promise<Readable> {
+    const Range = range ? `bytes=${range.start}-${range.end}` : undefined;
+    const object = await s3.send(new GetObjectCommand({ Bucket, Key: key, Range }));
     return object.Body as Readable;
   },
 
