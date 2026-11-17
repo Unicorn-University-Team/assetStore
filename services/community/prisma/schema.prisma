@@ -12,11 +12,26 @@ datasource db {
   provider = "postgresql"
 }
 
+enum ReportReason{
+  inappropriateContent
+  copyright
+  spam
+  brokenFile
+  other
+}
+
+enum ReportStatus {
+  open
+  resolved // = accepted
+  rejected
+}
+
 // Audit log (README, Audit log): who did what to which object and when. Each service keeps its own table with the
 // same columns. Rows are only ever added: never updated or deleted.
 model AuditLog {
   id         String   @id @default(uuid()) @db.Uuid
   // Empty until the service knows the logged-in user (the token check is not in packages/shared yet).
+  // token check is already in packages/shared
   actorId    String?  @map("actor_id") @db.Uuid
   action     String   @db.VarChar(30)
   objectType String   @map("object_type") @db.VarChar(20)
@@ -29,4 +44,36 @@ model AuditLog {
   @@index([actorId])
   @@index([createdAt])
   @@map("audit_log")
+}
+
+
+model Review {
+  id String @id @default(uuid()) @db.Uuid
+  assetId String @db.Uuid @map("asset_id")
+  authorId String @db.Uuid @map("author_id")
+  rating Int
+  comment String? @db.VarChar(2000)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([authorId, assetId])
+  @@index([createdAt])
+  @@index([assetId])
+  @@map("review")
+}
+
+model Report {
+  id String @id @default(uuid()) @db.Uuid
+  assetId String @db.Uuid @map("asset_id")
+  assetName String @map("asset_name")// need for the history
+  assetOwnerId String @db.Uuid @map("asset_owner_id")
+  authorId String @db.Uuid @map("author_id")
+  reason ReportReason
+  status ReportStatus @default(open)
+  createdAt DateTime @default(now()) @map("created_at")
+  decidedAt DateTime? @map("decided_at") //time when admin accepted or rejected
+  decidedById String? @db.Uuid @map("decided_by_id")//admin ID
+  
+  @@index([assetOwnerId, status])
+  @@index([assetId])
+  @@map("report")
 }
