@@ -1,4 +1,5 @@
 import { Link, Outlet } from 'react-router-dom'
+import StatusMessage from '../components/StatusMessage'
 import { usePageTitle } from '../usePageTitle'
 import { useAuth } from './auth-context'
 
@@ -14,11 +15,9 @@ function NoAccess() {
   usePageTitle('No access')
   return (
     <main className="content-width page-state">
-      <div className="state-box empty-state">
-        <h1>No access</h1>
-        <p>This page is only for admins.</p>
+      <StatusMessage kind="missing" heading="h1" title="No access" message="This page is only for admins.">
         <Link className="button button-primary" to="/">Back to the catalogue</Link>
-      </div>
+      </StatusMessage>
     </main>
   )
 }

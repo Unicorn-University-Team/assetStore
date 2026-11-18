@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import { useAuth } from '../auth/auth-context'
 import { listReports } from '../api/reports'
 import LiveCount from '../components/LiveCount'
+import PageErrorBoundary from '../components/PageErrorBoundary'
 import SearchBar from '../components/SearchBar'
 import { useLiveTick } from '../useLiveTick'
 
@@ -173,7 +174,9 @@ export default function MainLayout() {
   return (
     <div className="app-shell">
       {!isAuthPage && (isWorkspace ? <WorkspaceHeader /> : <SiteHeader />)}
-      <Outlet />
+      <PageErrorBoundary key={pathname}>
+        <Outlet />
+      </PageErrorBoundary>
       {!isAuthPage && <SiteFooter />}
     </div>
   )

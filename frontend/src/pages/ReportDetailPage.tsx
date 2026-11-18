@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ApiError } from '../api/client'
+import { ApiError, describeFailure } from '../api/client'
 import { getReport, reasonLabel, rejectReport, type Report } from '../api/reports'
 import ConfirmDialog from '../components/ConfirmDialog'
 import InlineError from '../components/InlineError'
+import StatusMessage from '../components/StatusMessage'
 import ReportStatusBadge from '../components/ReportStatusBadge'
 import { formatDateTime } from '../formatDate'
 import { usePageTitle } from '../usePageTitle'
@@ -13,7 +14,8 @@ export default function ReportDetailPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
   // The answer remembers its id, like the asset detail page.
-  const [loaded, setLoaded] = useState<{ id: string; report: Report | null; error: string } | null>(null)
+  const [loaded, setLoaded] = useState<{ id: string; report: Report | null; error: string; status: number } | null>(null)
+  const [retryKey, setRetryKey] = useState(0)
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState('')
@@ -21,17 +23,20 @@ export default function ReportDetailPage() {
   useEffect(() => {
     const controller = new AbortController()
     getReport(id, controller.signal)
-      .then((report) => setLoaded({ id, report, error: '' }))
+      .then((report) => setLoaded({ id, report, error: '', status: 0 }))
       .catch((cause: unknown) => {
-        if (!controller.signal.aborted) setLoaded({ id, report: null, error: cause instanceof Error ? cause.message : 'Could not load this report.' })
+        if (controller.signal.aborted) return
+        const failure = describeFailure(cause, 'Could not load this report.')
+        setLoaded({ id, report: null, error: failure.message, status: failure.status })
       })
     return () => controller.abort()
-  }, [id])
+  }, [id, retryKey])
 
   const current = loaded?.id === id ? loaded : null
   const report = current?.report ?? null
   const error = current?.error ?? ''
-  usePageTitle(report ? `Report: ${report.assetName ?? 'deleted asset'}` : error ? 'Report not found' : 'Report')
+  const missing = current?.status === 404
+  usePageTitle(report ? `Report: ${report.assetName ?? 'deleted asset'}` : missing ? 'Report not found' : error ? 'Could not load report' : 'Report')
 
   const cancelDeny = useCallback(() => setConfirming(false), [])
 
@@ -48,16 +53,37 @@ export default function ReportDetailPage() {
       setActionError(cause instanceof Error ? cause.message : 'The report could not be denied.')
       // Somebody else decided it in the meantime: show its current state.
       if (cause instanceof ApiError && cause.status === 409) {
-        getReport(id).then((fresh) => setLoaded({ id, report: fresh, error: '' })).catch(() => undefined)
+        getReport(id).then((fresh) => setLoaded({ id, report: fresh, error: '', status: 0 })).catch(() => undefined)
       }
     } finally {
       setBusy(false)
     }
   }
 
+  function retry() {
+    setLoaded(null)
+    setRetryKey((value) => value + 1)
+  }
+
   const breadcrumbs = <div className="breadcrumbs"><Link to="/admin/reports">Reports</Link><span>/</span><span>Report</span></div>
-  if (error) return <main className="content-width page-state">{breadcrumbs}<InlineError message={error} /><Link className="button button-secondary" to="/admin/reports">Back to the reports</Link></main>
-  if (!report) return <main className="content-width page-state"><div className="state-box" role="status">Loading report…</div></main>
+  if (error) {
+    return (
+      <main className="content-width page-state">
+        {breadcrumbs}
+        {missing ? (
+          <StatusMessage kind="missing" heading="h1" title="Report not found" message="This report does not exist, or it is no longer available.">
+            <Link className="button button-primary" to="/admin/reports">Back to the reports</Link>
+          </StatusMessage>
+        ) : (
+          <StatusMessage kind="error" heading="h1" title="Could not load this report" message={error}>
+            <button type="button" className="button button-primary" onClick={retry}>Try again</button>
+            <Link className="button button-secondary" to="/admin/reports">Back to the reports</Link>
+          </StatusMessage>
+        )}
+      </main>
+    )
+  }
+  if (!report) return <main className="content-width page-state"><StatusMessage kind="loading" title="Loading report" /></main>
 
   return (
     <main className="content-width admin-page">

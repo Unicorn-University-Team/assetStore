@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { describeFailure } from '../api/client'
 import { SEARCH_MAX_LENGTH, listAssets, type AssetPage } from '../api/assets'
 import AssetGrid from '../components/AssetGrid'
-import InlineError from '../components/InlineError'
 import Pagination from '../components/Pagination'
 import SearchBar from '../components/SearchBar'
+import StatusMessage from '../components/StatusMessage'
 import { useLiveTick } from '../useLiveTick'
 import { usePageTitle } from '../usePageTitle'
 
@@ -16,6 +17,7 @@ export default function CatalogPage() {
   // The answer remembers which search and page it is for; loading = it is not for the current ones yet.
   const request = `${page}:${search}`
   const [loaded, setLoaded] = useState<{ request: string; result: AssetPage | null; error: string } | null>(null)
+  const [retryKey, setRetryKey] = useState(0)
   usePageTitle(search ? `“${search}” in the catalogue` : 'Catalogue')
   // Download counts and new assets show up without a reload.
   const tick = useLiveTick(30_000)
@@ -26,12 +28,12 @@ export default function CatalogPage() {
       .then((result) => setLoaded({ request, result, error: '' }))
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return
-        const error = cause instanceof Error ? cause.message : 'Could not load the catalogue.'
+        const failure = describeFailure(cause, 'Could not load the catalogue.')
         // A failed quiet refresh keeps the results already on the screen.
-        setLoaded((previous) => previous?.request === request && previous.result ? previous : { request, result: null, error })
+        setLoaded((previous) => previous?.request === request && previous.result ? previous : { request, result: null, error: failure.message })
       })
     return () => controller.abort()
-  }, [search, page, request, tick])
+  }, [search, page, request, tick, retryKey])
 
   const loading = loaded?.request !== request
   // While the next search or page loads, the previous results stay on the screen (dimmed) instead of a loading box,
@@ -64,6 +66,11 @@ export default function CatalogPage() {
     setParams(new URLSearchParams())
   }
 
+  function retry() {
+    setLoaded(null)
+    setRetryKey((value) => value + 1)
+  }
+
   return (
     <main className="content-width catalog-page">
       <div className="catalog-tools">
@@ -89,35 +96,25 @@ export default function CatalogPage() {
           </button>
         </p>
       )}
-      {loading && !stale && <div className="state-box" role="status">Loading assets<span className="loading-dots">...</span></div>}
-      {!loading && error && <InlineError message={error} />}
+      {loading && !stale && <StatusMessage kind="loading" title="Loading assets" />}
+      {!loading && error && (
+        <StatusMessage kind="error" title="Could not load the catalogue" message={error}>
+          <button type="button" className="button button-primary" onClick={retry}>Try again</button>
+        </StatusMessage>
+      )}
       <div className={stale ? 'live-results is-stale' : 'live-results'} aria-busy={stale}>
       {showResults && !error && !assets.length && (
-        <div className="state-box empty-state">
-          <span className="empty-star">✳</span>
+        <StatusMessage
+          kind="empty"
+          title={search ? 'No assets found' : result && result.total > 0 ? 'This page is empty' : 'No assets yet'}
+          message={search ? `Nothing matches “${search}”. Try another name.` : result && result.total > 0 ? 'There are fewer assets than this page needs.' : 'Published assets will show up here.'}
+        >
           {search ? (
-            <>
-              <h2>No assets found</h2>
-              <p>Nothing matches “{search}”. Try another name.</p>
-              <button type="button" className="button button-secondary" onClick={clearSearch}>
-                Clear search
-              </button>
-            </>
+            <button type="button" className="button button-secondary" onClick={clearSearch}>Clear search</button>
           ) : result && result.total > 0 ? (
-            <>
-              <h2>This page is empty</h2>
-              <p>There are fewer assets than this page needs.</p>
-              <button type="button" className="button button-secondary" onClick={() => changePage(1)}>
-                Back to the first page
-              </button>
-            </>
-          ) : (
-            <>
-              <h2>No assets yet</h2>
-              <p>Published assets will show up here.</p>
-            </>
-          )}
-        </div>
+            <button type="button" className="button button-secondary" onClick={() => changePage(1)}>Back to the first page</button>
+          ) : null}
+        </StatusMessage>
       )}
       {showResults && !error && assets.length > 0 && <AssetGrid assets={assets} />}
       {showResults && !error && result && (
