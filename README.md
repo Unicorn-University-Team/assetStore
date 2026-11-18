@@ -225,7 +225,7 @@ prohlížeč ──multipart──▶ Caddy ──▶ catalog ──▶ busboy �
                                                   └── po uložení souboru ──▶ PostgreSQL (záznam asset)
 ```
 
-1. **Frontend** pošle `multipart/form-data`: pole `name`, `description`, `type` a soubor `file`. Textová pole jdou
+1. **Frontend** pošle `multipart/form-data`: pole `name`, `description`, `type`, nepovinně `tagList` a soubor `file`. Textová pole jdou
    první, soubor poslední (`uploadAsset()` ve `frontend/src/api/assets.ts`).
 2. **Caddy** požadavek jen přepošle službě catalog, nic neukládá.
 3. **`receiveUpload()`** (`services/catalog/src/utils/receiveUpload.ts`) čte požadavek přes busboy:
@@ -237,8 +237,26 @@ prohlížeč ──multipart──▶ Caddy ──▶ catalog ──▶ busboy �
 4. **Limit velikosti** `MAX_UPLOAD_MB` (výchozí 100 MB): když ho soubor překročí, nahrávání do S3 se zruší
    a odpověď je **413**.
 5. **Kontrola polí** (`name` 1–100 znaků, `type` jeden z `2d`, `3d`, `map`, `sound`, `environment`, `description`
-   do 2000 znaků) proběhne po uložení souboru. Když něco nesedí, soubor se z S3 hned smaže a odpověď je **400**.
-6. **Záznam v databázi** se vytvoří, až když je soubor v S3. Odpověď **201** s novým assetem.
+   do 2000 znaků, tagy podle [Tagy při publikaci](#tagy-při-publikaci-us-11)) proběhne po uložení souboru. Když něco
+   nesedí, soubor se z S3 hned smaže a odpověď je **400**.
+6. **Záznam v databázi** se vytvoří, až když je soubor v S3: asset, chybějící tagy, vazby `asset_tag` a audit
+   `assetCreated` v jedné transakci. Odpověď **201** s novým assetem.
+
+### Tagy při publikaci (US-1.1)
+
+`tagList` v `POST /api/assets` je seznam názvů tagů: jedno pole na tag (`-F tagList=medieval -F tagList=low-poly`),
+nebo jedno pole s JSON polem (`-F 'tagList=["medieval","low-poly"]'`). Bez `tagList` je asset bez tagů.
+
+1. Každý název se ořízne a převede na malá písmena, stejný tag dvakrát se počítá jednou.
+2. Název musí mít 1–50 znaků: latinka, číslice, pomlčka (BR-05). Jinak **400** se jménem tagu a **nic** se nevytvoří:
+   ani asset, ani žádný tag.
+3. Nejvýš 10 tagů na asset, jinak **400**.
+4. Existující tag se použije znovu (BR-03), chybějící se vytvoří (BR-02). Dva současné požadavky se stejným novým tagem
+   vytvoří jeden tag a oba projdou (`INSERT … ON CONFLICT DO NOTHING`), žádná 500.
+5. Potvrzení „vytvořit nový tag?“ řeší frontend; backend vytvoří všechny tagy, které v `tagList` přišly.
+
+Pravidla jsou v `services/catalog/src/utils/tags.ts` (testy `npm test` v `services/catalog`), uložení
+v `AssetModel.setTags()`: stejnou funkci použije úprava assetu (US-2). Smazání assetu smaže jeho vazby, tagy zůstanou.
 
 Když se cokoli pokazí, i když uživatel zavře stránku uprostřed nahrávání, v S3 nic nezůstane. Případné nedokončené
 části multipart uploadu navíc po 1 dni smaže lifecycle pravidlo bucketu.
@@ -305,9 +323,10 @@ s touto zprávou.
 ### Vyzkoušení přes curl
 
 ```bash
-curl -b cookies.txt -F name='Meč' -F type=3d -F description='Low poly' -F file=@sword.glb http://localhost:3002/api/assets
+curl -b cookies.txt -F name='Meč' -F type=3d -F description='Low poly' -F tagList=medieval -F file=@sword.glb http://localhost:3002/api/assets
 curl 'http://localhost:3002/api/assets?name=meč&pageIndex=0&pageSize=20'
-curl 'http://localhost:3002/api/assets?ownerId=<id uživatele>'   # jen assety jednoho uživatele
+curl -b cookies.txt 'http://localhost:3002/api/assets/my'      # moje assety (My assets), jen přihlášený
+curl 'http://localhost:3002/api/assets?ownerId=<id uživatele>'   # assety jednoho uživatele
 curl -OJ http://localhost:3002/api/assets/<id>/download     # uloží soubor pod původním jménem
 curl -b cookies.txt -X DELETE http://localhost:3002/api/assets/<id>
 ```
@@ -539,8 +558,9 @@ Endpointy mají **catalog** (assety), **identity** (přihlášení, viz [Přihl�
 |---|---|---|
 | `GET` | `/api/health/<služba>` | stav služby `identity`, `catalog` nebo `community`: `{ service, status, database }` (catalog i `storage`), při chybě 503 |
 | `GET` | `/api/assets?name=&ownerId=&pageIndex=&pageSize=` | seznam od nejnovějších, hledání v názvu bez ohledu na velikost písmen (`%` a `_` jsou obyčejné znaky); `ownerId` (uuid, jinak 400) vrátí jen assety tohoto uživatele (stránka „Moje assety“); stránky od 0, `pageSize` 1–100 (výchozí 20), jinak 400: `{ itemList, pageInfo: { pageIndex, pageSize, total } }` |
+| `GET` | `/api/assets/my?pageIndex=&pageSize=` | US-1 „My assets“ (AM `asset/listMy`): jen assety přihlášeného uživatele (vlastník z tokenu), od nejnovějších, stránkování jako u seznamu; bez přihlášení **401**, žádné assety = prázdný `itemList` |
 | `GET` | `/api/assets/:id` | jeden asset |
-| `POST` | `/api/assets` | nahrání, `multipart/form-data`: `name`, `description`, `type`, `file`; potřebuje přihlášení |
+| `POST` | `/api/assets` | nahrání, `multipart/form-data`: `name`, `description`, `type`, `tagList` (nepovinné, viz [Tagy při publikaci](#tagy-při-publikaci-us-11)), `file`; potřebuje přihlášení |
 | `PUT` | `/api/assets/:id` | JSON `{ name, description }`, soubor se nemění; jen vlastník, jinak **403** |
 | `DELETE` | `/api/assets/:id` | smaže záznam i soubor; jen vlastník nebo admin, jinak **403** |
 | `GET` | `/api/assets/:id/download` | stažení souboru, `downloadCount` + 1 |
@@ -551,7 +571,7 @@ Asset v odpovědi (`services/catalog/src/views/asset.view.ts`). `ownerId` je id 
 assetů `null`), `ownerName` jeho uživatelské jméno: catalog se na jména ptá identity (`GET /internal/users`,
 viz [Komunikace mezi službami](#komunikace-mezi-službami)). Když identity neodpoví, je `ownerName` `null` a katalog
 funguje dál. `previewUrl` je adresa náhledu u obrázků do 5 MB (jinak `null`, viz [Náhled](#náhled-get-apiassetsidfile)).
-`averageRating` je zatím `null`, `tagList` je `[]` a `reviewCount` je 0, dokud nejsou tagy a recenze:
+`tagList` jsou názvy tagů podle abecedy. `averageRating` je zatím `null` a `reviewCount` 0, dokud nejsou recenze:
 
 ```json
 {
@@ -561,7 +581,7 @@ funguje dál. `previewUrl` je adresa náhledu u obrázků do 5 MB (jinak `null`,
   "name": "Medieval sword",
   "description": "Low poly",
   "type": "3d",
-  "tagList": [],
+  "tagList": ["low-poly", "medieval"],
   "fileName": "sword.glb",
   "fileSize": 300000,
   "previewUrl": null,
