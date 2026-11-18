@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { describeFailure } from '../api/client'
 import { listMyAssets, type AssetPage } from '../api/assets'
 import { useAuth } from '../auth/auth-context'
 import AssetGrid from '../components/AssetGrid'
-import InlineError from '../components/InlineError'
 import Pagination from '../components/Pagination'
+import StatusMessage from '../components/StatusMessage'
 import { useLiveTick } from '../useLiveTick'
 
 export default function MyAssetsPage() {
@@ -14,6 +15,7 @@ export default function MyAssetsPage() {
   const page = Math.max(1, Number(params.get('page') ?? '1') || 1)
   const request = `${ownerId}:${page}`
   const [loaded, setLoaded] = useState<{ request: string; result: AssetPage | null; error: string } | null>(null)
+  const [retryKey, setRetryKey] = useState(0)
   // Download counts of the user's assets stay current without a reload.
   const tick = useLiveTick(30_000)
 
@@ -24,17 +26,22 @@ export default function MyAssetsPage() {
       .then((result) => setLoaded({ request, result, error: '' }))
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return
-        const error = cause instanceof Error ? cause.message : 'Could not load your assets.'
+        const failure = describeFailure(cause, 'Could not load your assets.')
         // A failed quiet refresh keeps the assets already on the screen.
-        setLoaded((previous) => previous?.request === request && previous.result ? previous : { request, result: null, error })
+        setLoaded((previous) => previous?.request === request && previous.result ? previous : { request, result: null, error: failure.message })
       })
     return () => controller.abort()
-  }, [ownerId, page, request, tick])
+  }, [ownerId, page, request, tick, retryKey])
 
   const loading = loaded?.request !== request
   const result = loading ? null : loaded.result
   const error = loading ? '' : loaded.error
   const assets = result?.items ?? []
+
+  function retry() {
+    setLoaded(null)
+    setRetryKey((value) => value + 1)
+  }
 
   function changePage(nextPage: number) {
     const next = new URLSearchParams(params)
@@ -53,25 +60,24 @@ export default function MyAssetsPage() {
         </div>
         <Link className="button button-primary" to="/my/assets/new">New asset</Link>
       </div>
-      {loading && <div className="state-box" role="status">Loading your assets<span className="loading-dots">...</span></div>}
-      {!loading && error && <InlineError message={error} />}
+      {loading && <StatusMessage kind="loading" title="Loading your assets" />}
+      {!loading && error && (
+        <StatusMessage kind="error" title="Could not load your assets" message={error}>
+          <button type="button" className="button button-primary" onClick={retry}>Try again</button>
+        </StatusMessage>
+      )}
       {!loading && !error && !assets.length && (
-        <div className="state-box empty-state">
-          <span className="empty-star">✳</span>
+        <StatusMessage
+          kind="empty"
+          title={result && result.total > 0 ? 'This page is empty' : 'No assets yet'}
+          message={result && result.total > 0 ? 'There are fewer assets than this page needs.' : 'Assets you publish show up here and in the catalogue.'}
+        >
           {result && result.total > 0 ? (
-            <>
-              <h2>This page is empty</h2>
-              <p>There are fewer assets than this page needs.</p>
-              <button type="button" className="button button-secondary" onClick={() => changePage(1)}>Back to the first page</button>
-            </>
+            <button type="button" className="button button-secondary" onClick={() => changePage(1)}>Back to the first page</button>
           ) : (
-            <>
-              <h2>No assets yet</h2>
-              <p>Assets you publish show up here and in the catalogue.</p>
-              <Link className="button button-primary" to="/my/assets/new">Publish an asset</Link>
-            </>
+            <Link className="button button-primary" to="/my/assets/new">Publish an asset</Link>
           )}
-        </div>
+        </StatusMessage>
       )}
       {!loading && !error && assets.length > 0 && <AssetGrid assets={assets} author={user?.username} />}
       {!loading && !error && result && (

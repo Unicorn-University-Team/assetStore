@@ -1,4 +1,4 @@
-import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './App.css'
 import { AuthProvider } from './auth/AuthProvider'
 import { RequireAdmin } from './auth/RequireAdmin'
@@ -10,21 +10,8 @@ import AuthPage from './pages/AuthPage'
 import CatalogPage from './pages/CatalogPage'
 import MyAssetsPage from './pages/MyAssetsPage'
 import NewAssetPage from './pages/NewAssetPage'
+import NotFoundPage from './pages/NotFoundPage'
 import ReportDetailPage from './pages/ReportDetailPage'
-import { usePageTitle } from './usePageTitle'
-
-function NotFoundPage() {
-  usePageTitle('Page not found')
-  return (
-    <main className="content-width page-state">
-      <div className="state-box empty-state">
-        <h1>Page not found</h1>
-        <p>The page you requested does not exist.</p>
-        <Link className="button button-primary" to="/">Back to the catalogue</Link>
-      </div>
-    </main>
-  )
-}
 
 export default function App() {
   return (

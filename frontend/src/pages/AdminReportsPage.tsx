@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { describeFailure } from '../api/client'
 import { listReports, reasonLabel, type ReportPage, type ReportStatusFilter } from '../api/reports'
-import InlineError from '../components/InlineError'
 import Pagination from '../components/Pagination'
+import StatusMessage from '../components/StatusMessage'
 import ReportStatusBadge from '../components/ReportStatusBadge'
 import { formatDateTime } from '../formatDate'
 import { useLiveTick } from '../useLiveTick'
@@ -33,6 +34,7 @@ export default function AdminReportsPage() {
   const page = Math.max(1, Number(params.get('page') ?? '1') || 1)
   const request = `${status}:${page}`
   const [loaded, setLoaded] = useState<{ request: string; result: ReportPage | null; error: string } | null>(null)
+  const [retryKey, setRetryKey] = useState(0)
   // The notice is kept here and removed from the history entry at once, so a reload does not show it again.
   const [notice, setNotice] = useState(() => readNotice(location.state))
   const handedNotice = readNotice(location.state)
@@ -50,17 +52,22 @@ export default function AdminReportsPage() {
       .then((result) => setLoaded({ request, result, error: '' }))
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return
-        const error = cause instanceof Error ? cause.message : 'Could not load the reports.'
+        const failure = describeFailure(cause, 'Could not load the reports.')
         // A failed quiet refresh keeps the reports already on the screen.
-        setLoaded((previous) => previous?.request === request && previous.result ? previous : { request, result: null, error })
+        setLoaded((previous) => previous?.request === request && previous.result ? previous : { request, result: null, error: failure.message })
       })
     return () => controller.abort()
-  }, [status, page, request, tick])
+  }, [status, page, request, tick, retryKey])
 
   const loading = loaded?.request !== request
   const result = loading ? null : loaded.result
   const error = loading ? '' : loaded.error
   const reports = result?.items ?? []
+
+  function retry() {
+    setLoaded(null)
+    setRetryKey((value) => value + 1)
+  }
 
   function changeFilter(next: ReportStatusFilter) {
     setParams(next === 'open' ? {} : { status: next })
@@ -96,15 +103,20 @@ export default function AdminReportsPage() {
           </button>
         ))}
       </div>
-      {loading && <div className="state-box" role="status">Loading reports<span className="loading-dots">...</span></div>}
-      {!loading && error && <InlineError message={error} />}
+      {loading && <StatusMessage kind="loading" title="Loading reports" />}
+      {!loading && error && (
+        <StatusMessage kind="error" title="Could not load the reports" message={error}>
+          <button type="button" className="button button-primary" onClick={retry}>Try again</button>
+        </StatusMessage>
+      )}
       {!loading && !error && !reports.length && (
-        <div className="state-box empty-state">
-          <span className="empty-star">✳</span>
-          <h2>{result && result.total > 0 ? 'This page is empty' : status === 'open' ? 'No open reports' : 'No reports'}</h2>
-          <p>{result && result.total > 0 ? 'There are fewer reports than this page needs.' : status === 'open' ? 'Nothing waits for a decision.' : 'No report has this status yet.'}</p>
+        <StatusMessage
+          kind="empty"
+          title={result && result.total > 0 ? 'This page is empty' : status === 'open' ? 'No open reports' : 'No reports'}
+          message={result && result.total > 0 ? 'There are fewer reports than this page needs.' : status === 'open' ? 'Nothing waits for a decision.' : 'No report has this status yet.'}
+        >
           {result && result.total > 0 && <button type="button" className="button button-secondary" onClick={() => changePage(1)}>Back to the first page</button>}
-        </div>
+        </StatusMessage>
       )}
       {!loading && !error && reports.length > 0 && (
         <div className="table-scroll">
