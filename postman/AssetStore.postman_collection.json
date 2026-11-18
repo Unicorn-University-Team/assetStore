@@ -366,6 +366,49 @@
           }
         },
         {
+          "name": "List mine (My assets)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('only my assets', () => pm.response.json().itemList.forEach((a) => pm.expect(a.ownerId).to.be.a('string')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "US-1 My assets: only the logged-in user's assets, newest first. Needs Login, otherwise 401.",
+            "url": {
+              "raw": "{{baseUrl}}/api/assets/my?pageIndex=0&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "assets",
+                "my"
+              ],
+              "query": [
+                {
+                  "key": "pageIndex",
+                  "value": "0",
+                  "description": "Page from 0"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "description": "1 to 100, default 20"
+                }
+              ]
+            }
+          }
+        },
+        {
           "name": "Create",
           "event": [
             {
@@ -410,6 +453,18 @@
                   "key": "type",
                   "value": "3d",
                   "type": "text"
+                },
+                {
+                  "key": "tagList",
+                  "value": "medieval",
+                  "type": "text",
+                  "description": "Optional; one field per tag (max 10), lower-cased; a missing tag is created. Wrong name → 400"
+                },
+                {
+                  "key": "tagList",
+                  "value": "Low-Poly",
+                  "type": "text",
+                  "description": "Second tag (saved as low-poly)"
                 },
                 {
                   "key": "file",

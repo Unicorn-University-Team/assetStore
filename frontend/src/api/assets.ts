@@ -70,15 +70,12 @@ export async function listAssets(search = '', page = 1, signal?: AbortSignal): P
   }
 }
 
-export async function listMyAssets(ownerId: string, page = 1, signal?: AbortSignal): Promise<AssetPage> {
+export async function listMyAssets(page = 1, signal?: AbortSignal): Promise<AssetPage> {
   const pageSize = 20
-  const query = new URLSearchParams({
-    ownerId,
-    pageIndex: String(Math.max(0, page - 1)),
-    pageSize: String(pageSize),
-  })
-  // The catalog filters by owner itself, so the total and the pages count only this user's assets.
-  const response = await apiGet<AssetListResponse>(`/assets?${query}`, signal)
+  const query = new URLSearchParams({ pageIndex: String(Math.max(0, page - 1)), pageSize: String(pageSize) })
+  // GET /api/assets/my: the catalog takes the owner from the session, so the total and the pages count only the
+  // logged-in user's assets.
+  const response = await apiGet<AssetListResponse>(`/assets/my?${query}`, signal)
   return {
     items: response.itemList,
     page: response.pageInfo.pageIndex + 1,
