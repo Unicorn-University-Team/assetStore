@@ -7,6 +7,7 @@ import { FileStorage } from '../storage/file-storage';
 import { HttpError } from '@assetstore/shared';
 import { parseRange, previewContentType } from '../utils/preview';
 import { receiveUpload } from '../utils/receiveUpload';
+import { normalizeTagList, tagListFromForm } from '../utils/tags';
 import { toAssetView } from '../views/asset.view';
 
 type IdParams = { id: string };
@@ -100,19 +101,31 @@ export const AssetController = {
     res.json({ itemList: items.map((asset) => toAssetView(asset, ownerNames)), pageInfo: { pageIndex, pageSize, total } });
   },
 
+  // GET /api/assets/my (AM asset/listMy, US-1 "My assets"): only the logged-in user's assets, newest first, the same
+  // paging as asset/list. The owner always comes from the token, never from the request.
+  async listMy(req: Request, res: Response) {
+    const actor = readActor(res);
+    const pageIndex = readInteger('pageIndex', req.query.pageIndex, 0, null, 0);
+    const pageSize = readInteger('pageSize', req.query.pageSize, 1, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE);
+    const { items, total } = await AssetModel.findPage({ name: '', ownerId: actor.id, pageIndex, pageSize });
+
+    const ownerNames = await IdentityClient.usernames([actor.id]);
+    res.json({ itemList: items.map((asset) => toAssetView(asset, ownerNames)), pageInfo: { pageIndex, pageSize, total } });
+  },
+
   async getById(req: Request<IdParams>, res: Response) {
     const asset = await findAsset(req.params.id);
     res.json(toAssetView(asset, await IdentityClient.usernames([asset.ownerId])));
   },
 
-  // multipart/form-data: name, description, type, file
+  // multipart/form-data: name, description, type, tagList (optional, one field per tag or a JSON array), file
   async create(req: Request, res: Response) {
     // Refuse before reading the body when the storage is already full.
     if ((await AssetModel.totalFileSize()) >= STORAGE_LIMIT_BYTES) throw storageFull();
 
     const actor = readActor(res);
 
-    const { fields, file } = await receiveUpload(req, {
+    const { fields, fieldLists, file } = await receiveUpload(req, {
       fileField: 'file',
       maxBytes: env.maxUploadMb * 1024 * 1024,
       allowedExtensions: ALLOWED_EXTENSIONS,
@@ -130,7 +143,8 @@ export const AssetController = {
         fileSize: file.size,
         contentType: file.contentType,
       };
-      const asset = await AssetModel.create(input, actor);
+      const tagNames = normalizeTagList(tagListFromForm(fieldLists.tagList));
+      const asset = await AssetModel.create(input, tagNames, actor);
       res.status(201).json(toAssetView(asset, await IdentityClient.usernames([asset.ownerId])));
     } catch (error) {
       await FileStorage.remove(file.key).catch(() => undefined);

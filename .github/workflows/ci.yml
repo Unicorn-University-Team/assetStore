@@ -65,6 +65,8 @@ jobs:
           }
       - name: Typecheck
         run: npm run typecheck
+      - name: Tests
+        run: npm test --if-present
       - name: Build
         run: npm run build
 

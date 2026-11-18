@@ -12,31 +12,45 @@ datasource db {
 }
 
 model Asset {
-  id            String   @id @default(uuid()) @db.Uuid
-  ownerId       String?  @map("owner_id") @db.Uuid
-  name          String   @db.VarChar(100)
-  description   String   @default("")
+  id            String     @id @default(uuid()) @db.Uuid
+  ownerId       String?    @map("owner_id") @db.Uuid
+  name          String     @db.VarChar(100)
+  description   String     @default("")
   // 2d | 3d | map | sound | environment, checked in the controller
-  type          String   @db.VarChar(20)
+  type          String     @db.VarChar(20)
   // Generated S3 object key; the file is only served through GET /api/assets/:id/download
-  fileKey       String   @unique @map("file_key")
-  fileName      String   @map("file_name")
-  fileSize      Int      @map("file_size")
-  contentType   String   @map("content_type")
-  downloadCount Int      @default(0) @map("download_count")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  fileKey       String     @unique @map("file_key")
+  fileName      String     @map("file_name")
+  fileSize      Int        @map("file_size")
+  contentType   String     @map("content_type")
+  downloadCount Int        @default(0) @map("download_count")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+  tags          AssetTag[]
 
   @@index([ownerId])
   @@map("asset")
 }
 
 model Tag {
-  id   String @id @default(uuid()) @db.Uuid
+  id     String     @id @default(uuid()) @db.Uuid
   // 1 to 50 characters: lower case letters, digits and a hyphen (CHECK "tag_name_check" in the add_tag migration)
-  name String @unique @db.VarChar(50)
+  name   String     @unique @db.VarChar(50)
+  assets AssetTag[]
 
   @@map("tag")
+}
+
+// Which tags an asset has (US-1.1, BR-04). Deleting an asset removes its links; a tag stays for other assets.
+model AssetTag {
+  assetId String @map("asset_id") @db.Uuid
+  tagId   String @map("tag_id") @db.Uuid
+  asset   Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  tag     Tag    @relation(fields: [tagId], references: [id], onDelete: Restrict)
+
+  @@id([assetId, tagId])
+  @@index([tagId])
+  @@map("asset_tag")
 }
 
 // Audit log (README, Audit log): who did what to which object and when. Each service keeps its own table with the

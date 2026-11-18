@@ -21,10 +21,11 @@ export interface UploadOptions {
 
 // Reads a multipart/form-data request: text fields are collected, the single file is streamed
 // straight to S3 under a generated key. On any error the uploaded object is removed again.
+// fields keeps the last value of each field; fieldLists keeps all of them (a list such as tagList=a, tagList=b).
 export function receiveUpload(
   req: Request,
   options: UploadOptions,
-): Promise<{ fields: Record<string, string>; file?: UploadedFile }> {
+): Promise<{ fields: Record<string, string>; fieldLists: Record<string, string[]>; file?: UploadedFile }> {
   return new Promise((resolve, reject) => {
     let parser: busboy.Busboy;
     try {
@@ -38,6 +39,7 @@ export function receiveUpload(
     }
 
     const fields: Record<string, string> = {};
+    const fieldLists: Record<string, string[]> = {};
     let file: UploadedFile | undefined;
     let s3Upload: Upload | undefined;
     let upload: Promise<unknown> | undefined;
@@ -45,6 +47,7 @@ export function receiveUpload(
 
     parser.on('field', (name, value) => {
       fields[name] = value;
+      (fieldLists[name] ??= []).push(value);
     });
 
     parser.on('file', (field, stream, info) => {
@@ -111,7 +114,7 @@ export function receiveUpload(
         reject(failure);
         return;
       }
-      resolve({ fields, file });
+      resolve({ fields, fieldLists, file });
     });
 
     req.pipe(parser);
