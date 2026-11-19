@@ -1,10 +1,9 @@
-import { errorHandler, notFound, requireInternalKey } from '@assetstore/shared';
+import { errorHandler, notFound } from '@assetstore/shared';
 import cookieParser from 'cookie-parser';
-import express, { type Request, type Response } from 'express';
-import { CatalogClient } from './clients/catalog.client';
-import { env } from './config/env';
+import express from 'express';
 import { prisma } from './db/prisma';
 import { assetReportRoutes, reportRoutes } from './routes/report.routes';
+import { assetReviewRoutes } from './routes/review.routes';
 
 export const app = express();
 
@@ -29,12 +28,7 @@ app.get('/health', async (_req, res) => {
 //   /api/assets/:id/reports, /api/reports/...    reports
 app.use('/api/assets/:assetId/reports', assetReportRoutes);
 app.use('/api/reports', reportRoutes);
-
-// Temporary check of community -> catalog communication; remove once reviews call CatalogClient themselves.
-async function checkAsset(req: Request<{ id: string }>, res: Response) {
-  res.json({ assetId: req.params.id, exists: await CatalogClient.assetExists(req.params.id) });
-}
-app.get('/internal/check-asset/:id', requireInternalKey(env.internalKey), checkAsset);
+app.use('/api/assets/:assetId/reviews', assetReviewRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

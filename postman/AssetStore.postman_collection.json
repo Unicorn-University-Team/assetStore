@@ -666,6 +666,51 @@
       ]
     },
     {
+      "name": "Reviews",
+      "item": [
+        {
+          "name": "Create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/assets/{{assetId}}/reviews",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "assets",
+                "{{assetId}}",
+                "reviews"
+              ]
+            },
+            "description": "Review the asset in assetId (Assets → List sets it). Needs Login. rating: whole number 1 to 5; comment optional, at most 2000 characters. Own asset 403, second review of the same asset 409. The answer has the new averageRating and reviewCount of the asset.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rating\": 5,\n  \"comment\": \"\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Reports",
       "item": [
         {
