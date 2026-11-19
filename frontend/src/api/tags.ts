@@ -9,12 +9,3 @@ export async function listTags(prefix: string, signal?: AbortSignal): Promise<Ta
   const response = await apiGet<TagListResponse>(`/tags?${query}`, signal)
   return response.itemList
 }
-
-// A tag can only be added when the catalogue already has it (a missing tag is created on its own page).
-export async function missingTag(names: string[], signal?: AbortSignal): Promise<string | null> {
-  for (const name of names) {
-    const found = await listTags(name, signal)
-    if (!found.some((tag) => tag.name === name)) return name
-  }
-  return null
-}

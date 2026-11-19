@@ -312,3 +312,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .live-results { transition: none; }
   .loading-dots i { animation: none; opacity: 1; }
 }
+/* US-1.1: the last row of the tag list offers to create the typed tag. */
+.tag-suggestion.tag-create { border-top: 1px solid #d9e2ff; font-weight: 500; }
+.tag-suggestion.tag-create strong { font-weight: 700; }

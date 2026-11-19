@@ -53,7 +53,7 @@ type AssetListResponse = {
 // Keep the UI's one-based page model while translating the backend's zero-based API.
 export type AssetPage = { items: Asset[]; page: number; pageSize: number; total: number }
 
-export type NewAsset = { name: string; description: string; type: AssetType; file: File; preview: File; tags?: string[] }
+export type NewAsset = { name: string; description: string; type: AssetType; file: File; tags?: string[] }
 
 // The catalog API refuses a longer name search (400).
 export const SEARCH_MAX_LENGTH = 100
@@ -85,16 +85,15 @@ export async function listMyAssets(page = 1, signal?: AbortSignal): Promise<Asse
 }
 
 // Upload and delete need a logged-in user (the session cookie goes with every request).
+// tagList: one field per tag; the catalogue creates the tags it does not have yet (US-1.1).
 export function uploadAsset(asset: NewAsset): Promise<Asset> {
   const form = new FormData()
-  // Text fields first. The asset file must be the first file part: the catalogue keeps a single file
-  // and ignores any file after it, so the preview has to follow the asset file.
+  // Text fields first, the file last.
   form.append('name', asset.name)
   form.append('description', asset.description)
   form.append('type', asset.type)
   for (const tag of asset.tags ?? []) form.append('tagList', tag)
   form.append('file', asset.file)
-  form.append('preview', asset.preview)
   return apiPostForm<Asset>('/assets', form)
 }
 

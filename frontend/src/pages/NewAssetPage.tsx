@@ -1,18 +1,15 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getCurrentUser } from '../api/auth'
 import {
   ASSET_FILE_EXTENSIONS,
   ASSET_TYPES,
   MAX_UPLOAD_BYTES,
-  PREVIEW_EXTENSIONS,
   fileExtension,
   isAllowedAssetExtension,
-  isAllowedPreviewExtension,
   uploadAsset,
   type AssetType,
 } from '../api/assets'
-import { missingTag } from '../api/tags'
 import { useAuth } from '../auth/auth-context'
 import FormField from '../components/FormField'
 import InlineError from '../components/InlineError'
@@ -27,14 +24,12 @@ const TYPE_LABELS: Record<AssetType, string> = {
 }
 
 const ASSET_ACCEPT = ASSET_FILE_EXTENSIONS.map((extension) => `.${extension}`).join(',')
-const PREVIEW_ACCEPT = PREVIEW_EXTENSIONS.map((extension) => `.${extension}`).join(',')
 
 type FormErrors = {
   name?: string
   description?: string
   type?: string
   file?: string
-  preview?: string
   tags?: string
 }
 
@@ -45,34 +40,6 @@ function fileProblem(file: File): string | undefined {
   }
   if (file.size > MAX_UPLOAD_BYTES) return 'The file is larger than 100 MB.'
   return undefined
-}
-
-function previewProblem(file: File): string | undefined {
-  const extension = fileExtension(file.name)
-  if (!isAllowedPreviewExtension(extension)) return 'The preview must be a png, jpg, jpeg, webp or gif image.'
-  if (file.size > MAX_UPLOAD_BYTES) return 'The preview is larger than 100 MB.'
-  return undefined
-}
-
-function useObjectUrl(file: File | null): string | null {
-  const url = useMemo(() => (file ? URL.createObjectURL(file) : null), [file])
-  useEffect(() => {
-    if (!url) return
-    return () => URL.revokeObjectURL(url)
-  }, [url])
-  return url
-}
-
-function PreviewPlaceholder() {
-  return (
-    <span className="preview-frame" aria-hidden="true">
-      <svg viewBox="0 0 80 70" width="72" height="62">
-        <polygon points="40,6 70,22 40,38 10,22" fill="#f4f7ff" />
-        <polygon points="10,22 40,38 40,62 10,46" fill="#8ea4f2" />
-        <polygon points="70,22 40,38 40,62 70,46" fill="#3355e0" />
-      </svg>
-    </span>
-  )
 }
 
 function summary(errors: FormErrors): string {
@@ -90,17 +57,14 @@ export default function NewAssetPage() {
   const [description, setDescription] = useState('')
   const [type, setType] = useState<AssetType | ''>('')
   const [file, setFile] = useState<File | null>(null)
-  const [preview, setPreview] = useState<File | null>(null)
   const [tags, setTags] = useState<string[]>([])
   const [errors, setErrors] = useState<FormErrors>({})
   const [formError, setFormError] = useState('')
   const [busy, setBusy] = useState(false)
   const suspended = user?.status === 'SUSPENDED'
-  const previewIsImage = preview ? isAllowedPreviewExtension(fileExtension(preview.name)) : false
-  const previewUrl = useObjectUrl(previewIsImage ? preview : null)
   const locked = busy || suspended
-  // Required fields: name, type, file and preview. The button stays off until each one has a value.
-  const canPublish = name.trim() !== '' && type !== '' && file !== null && preview !== null
+  // Required fields (US-1): name, type and file. The button stays off until each one has a value.
+  const canPublish = name.trim() !== '' && type !== '' && file !== null
 
   function clearField(field: keyof FormErrors) {
     setFormError('')
@@ -113,14 +77,6 @@ export default function NewAssetPage() {
     setFile(next)
     setFormError('')
     setErrors((current) => ({ ...current, file: next ? fileProblem(next) : undefined }))
-  }
-
-  function onPreview(event: ChangeEvent<HTMLInputElement>) {
-    const next = event.target.files?.[0] ?? null
-    event.target.value = ''
-    setPreview(next)
-    setFormError('')
-    setErrors((current) => ({ ...current, preview: next ? previewProblem(next) : undefined }))
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -150,24 +106,16 @@ export default function NewAssetPage() {
       if (!type) next.type = 'Select a type.'
       if (!file) next.file = 'Attach the asset file.'
       else next.file = fileProblem(file)
-      if (!preview) next.preview = 'Add a preview image.'
-      else next.preview = previewProblem(preview)
 
+      // Tags are existing ones or new ones the user confirmed with "Create tag" (US-1.1); the catalogue creates
+      // the new ones together with the asset. A tag still typed but not confirmed stops the publishing.
       const committed = (await tagsRef.current?.commit()) ?? { tags, error: '' }
       if (committed.error) next.tags = committed.error
       else if (committed.tags.length > 10) next.tags = 'You can add at most 10 tags.'
-      else {
-        try {
-          const missing = await missingTag(committed.tags)
-          if (missing) next.tags = `The tag “${missing}” does not exist.`
-        } catch (cause) {
-          next.tags = cause instanceof Error ? cause.message : 'Could not look up tags.'
-        }
-      }
 
       setErrors(next)
       const problem = summary(next)
-      if (problem || !file || !preview || !type) {
+      if (problem || !file || !type) {
         setFormError(problem || 'The input is not valid.')
         return
       }
@@ -181,7 +129,6 @@ export default function NewAssetPage() {
         description: description.trim(),
         type,
         file,
-        preview,
         tags: committed.tags,
       })
       navigate(`/assets/${encodeURIComponent(asset.id)}`)
@@ -263,28 +210,7 @@ export default function NewAssetPage() {
             />
           </div>
         </FormField>
-        <FormField id="asset-preview" label="Preview" requiredMark error={errors.preview}>
-          <div className="preview-row">
-            {previewUrl
-              ? <span className="preview-frame"><img src={previewUrl} alt="" /></span>
-              : <PreviewPlaceholder />}
-            <div className="preview-side">
-              <div className="add-preview">
-                + Add preview
-                <input
-                  id="asset-preview"
-                  type="file"
-                  accept={PREVIEW_ACCEPT}
-                  disabled={locked}
-                  aria-invalid={Boolean(errors.preview)}
-                  aria-describedby={errors.preview ? 'asset-preview-error' : undefined}
-                  onChange={onPreview}
-                />
-              </div>
-              {!errors.preview && <p className="field-hint">{preview ? preview.name : 'Image required'}</p>}
-            </div>
-          </div>
-        </FormField>
+        {/* Preview: comes back once the catalogue stores a preview image (not part of US-1). */}
         <FormField id="asset-tags" label="Tags" error={errors.tags}>
           <TagInput
             ref={tagsRef}
