@@ -1,78 +1,71 @@
-import { HttpError } from "@assetstore/shared"
-import { Request, Response } from "express"
-import { CatalogClient } from "../clients/catalog.client";
-import { ReviewModel } from "../models/review.model";
-import {IdentityClient} from "../clients/identity.client"
-import { Prisma } from "../generated/prisma/client";
+import type { Request, Response } from 'express';
+import { HttpError } from '@assetstore/shared';
+import { CatalogClient } from '../clients/catalog.client';
+import { IdentityClient } from '../clients/identity.client';
+import { Prisma } from '../generated/prisma/client';
+import { ReviewModel } from '../models/review.model';
 
-
-// const authorId = res.locals.userId
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-function validateAssetId(assetId: string | undefined | string[]) : asserts assetId is string {
-    if (typeof assetId !== "string" || !UUID.test(assetId)) {
-        throw new HttpError(400, "Invalid asset ID.");
-    }
+const COMMENT_MAX_LENGTH = 2000;
+
+// Whole number of stars from 1 to 5 (the same rule as CHECK "review_rating_check").
+function readRating(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 5) {
+    throw new HttpError(400, '"rating" must be a whole number from 1 to 5');
+  }
+  return value;
 }
 
-async function ensureReviewAllowed(assetId: string, authorId: string) {  
-
-   const assets = await CatalogClient.assetSummaries([assetId])
-   const asset = assets.get(assetId)
-
-    if(!asset) throw new HttpError(404, "No asset found.")
-
-    const ownerId = asset.ownerId;
-    if(authorId === ownerId) throw new HttpError(403, "Forbidden to write a review.")
- }
-
-function validateRating(rating: unknown): asserts rating is number {
-   if(typeof rating !== "number"||!Number.isInteger(rating)) throw new HttpError(400, "Invalid rating type.")
-    if(rating > 5 || rating < 1) throw new HttpError(400, "Invalid rating.")
- }
-
-function validateComment(comment: unknown): asserts comment is string | undefined{
-    if(typeof comment !== "string" && typeof comment !== "undefined") throw new HttpError(400, "Invalid comment type.")
-    if(typeof comment === "string" && comment.length > 2000) throw new HttpError(400, "Too long comment.")
-    }
-
+// The comment is optional: missing, null or only spaces = no comment (null).
+function readComment(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string') throw new HttpError(400, '"comment" must be a string');
+  const comment = value.trim();
+  if (comment.length > COMMENT_MAX_LENGTH) {
+    throw new HttpError(400, `"comment" must be at most ${COMMENT_MAX_LENGTH} characters`);
+  }
+  return comment === '' ? null : comment;
+}
 
 export const ReviewController = {
-    async create(req: Request, res: Response){
- 
-        const assetId = req.params.assetId;
-        const authorId = res.locals.userId;
-        const rating : unknown = req.body?.rating;
-        const comment : unknown = req.body?.comment;
-        validateAssetId(assetId);
-        validateRating(rating);
-        validateComment(comment);
-        await ensureReviewAllowed(assetId, authorId);
-        
-   try{
-        const review = await ReviewModel.createReview({rating, comment, authorId, assetId});
-        const ratingSummary = await ReviewModel.getRatingSummary(assetId);
+  // US-4, POST /api/assets/:assetId/reviews: { rating, comment? }. Any logged-in user except the asset's owner,
+  // one review per user and asset.
+  async create(req: Request<{ assetId: string }>, res: Response) {
+    const authorId: string = res.locals.userId;
+    const body = (req.body ?? {}) as { rating?: unknown; comment?: unknown };
+    const rating = readRating(body.rating);
+    const comment = readComment(body.comment);
 
-        const usernames = await IdentityClient.usernames([authorId]); // returns an entire Map (key - value)
-        const authorName = usernames.get(authorId) ?? null; // returns specific value (authorName)
+    const assetId = req.params.assetId.toLowerCase();
+    const asset = UUID.test(assetId) ? (await CatalogClient.assetSummaries([assetId])).get(assetId) : undefined;
+    if (!asset) throw new HttpError(404, 'Asset not found');
+    if (asset.ownerId === authorId) throw new HttpError(403, 'You cannot review your own asset');
 
-        return res.status(201).json({
-            id: review.id,
-            assetId: review.assetId,
-            authorId: review.authorId,
-            authorName: authorName,
-            rating: review.rating,
-            comment: review.comment,
-            createdAt: review.createdAt,
-            averageRating: ratingSummary.averageRating
-        })
+    let review;
+    try {
+      review = await ReviewModel.create({ assetId, authorId, rating, comment });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new HttpError(409, 'You have already reviewed this asset');
+      }
+      throw error;
     }
-    catch (error){
-        if ( error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002" )
-        {
-            throw new HttpError(409, "User has already reviewed this asset.");
-        }
-        throw error;
-        }
-  
-    }
-}
+
+    // Names are only for display: when identity does not answer, authorName is null.
+    const [summary, usernames] = await Promise.all([
+      ReviewModel.ratingSummary(assetId),
+      IdentityClient.usernames([authorId]),
+    ]);
+    res.status(201).json({
+      id: review.id,
+      assetId: review.assetId,
+      authorId: review.authorId,
+      authorName: usernames.get(authorId) ?? null,
+      rating: review.rating,
+      comment: review.comment,
+      createdAt: review.createdAt,
+      averageRating: summary.averageRating,
+      reviewCount: summary.reviewCount,
+    });
+  },
+};

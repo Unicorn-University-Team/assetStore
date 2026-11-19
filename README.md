@@ -369,6 +369,22 @@ assetu) a identity (jména uživatelů) přes `/internal` (viz [Komunikace mezi 
   `decidedByName`, `decidedAt`. Jména jsou `null`, když asset nebo uživatel už neexistuje nebo služba neodpověděla;
   `assetOwnerId` je vlastník v době nahlášení, takže zůstane i po smazání assetu.
 
+## Recenze
+
+Recenze jsou ve službě **community** (tabulka `review`, `services/community/src/models/review.model.ts`). Stejně
+jako u reportů se ukládají jen id assetu a autora, vlastníka assetu community zjistí od catalogu.
+
+| Metoda | Cesta | Kdo | Co dělá |
+|---|---|---|---|
+| `POST` | `/api/assets/:id/reviews` | přihlášený | US-4: `{ rating, comment? }` → **201** recenze |
+
+- `rating` je celé číslo 1–5 (i CHECK v databázi), `comment` je nepovinný, nejvýš 2000 znaků; prázdný = `null`.
+- **Pravidla:** vlastní asset hodnotit nejde (**403**), jeden uživatel má na jeden asset nejvýš jednu recenzi
+  (**409**, unikátní `(author_id, asset_id)`), neexistující asset → **404**, bez přihlášení **401**.
+- **Odpověď:** `id`, `assetId`, `authorId`, `authorName`, `rating`, `comment`, `createdAt` a nový stav assetu
+  `averageRating` (zaokrouhlený na jedno desetinné místo) a `reviewCount`. `authorName` je `null`, když identity
+  neodpoví.
+
 ## Přihlášení
 
 Registraci a přihlášení dělá služba identity:
@@ -483,10 +499,10 @@ Lokálně musí běžet obě služby (`npm run dev` v `services/catalog` i `serv
 
 ```bash
 curl http://localhost:3002/internal/assets/<id>/exists        # catalog přímo
-curl http://localhost:3003/internal/check-asset/<id>          # community → catalog (dočasná ukázková cesta)
 ```
 
-S nastaveným `INTERNAL_KEY` přidat `-H 'X-Internal-Key: <klíč>'`. Když catalog neběží, druhý příkaz vrátí 503.
+S nastaveným `INTERNAL_KEY` přidat `-H 'X-Internal-Key: <klíč>'`. Cestu community → catalog používají reporty
+a recenze (`CatalogClient.assetSummaries`): když catalog neběží, vrátí jejich vytvoření 503.
 
 ## Audit log
 
@@ -552,7 +568,7 @@ a bez CORS.
 ## API
 
 Endpointy mají **catalog** (assety), **identity** (přihlášení, viz [Přihlášení](#přihlášení)) a **community**
-(reporty, viz [Nahlášení assetů](#nahlášení-assetů-reporty)). Všechno se dá vyzkoušet v Postmanu, viz [Postman](#postman) níže.
+(reporty a recenze, viz [Nahlášení assetů](#nahlášení-assetů-reporty) a [Recenze](#recenze)). Všechno se dá vyzkoušet v Postmanu, viz [Postman](#postman) níže.
 
 | Metoda | Cesta | Co dělá |
 |---|---|---|

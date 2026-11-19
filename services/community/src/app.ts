@@ -30,6 +30,5 @@ app.use('/api/assets/:assetId/reports', assetReportRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/assets/:assetId/reviews', assetReviewRoutes);
 
-
 app.use(notFound);
 app.use(errorHandler);

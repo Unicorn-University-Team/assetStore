@@ -1,8 +1,9 @@
-import { requireAuth } from "@assetstore/shared";
-import { Router } from "express";
-import { loadPublicKey } from "../auth/jwt";
-import { ReviewController } from "../controllers/review.controller";
+import { requireAuth } from '@assetstore/shared';
+import { Router } from 'express';
+import { loadPublicKey } from '../auth/jwt';
+import { ReviewController } from '../controllers/review.controller';
 
-export const assetReviewRoutes = Router({mergeParams: true});
+// /api/assets/:assetId/reviews: reviewing an asset (any logged-in user except its owner).
+export const assetReviewRoutes = Router({ mergeParams: true });
 
-assetReviewRoutes.post("/", requireAuth(loadPublicKey), ReviewController.create)
+assetReviewRoutes.post('/', requireAuth(loadPublicKey), ReviewController.create);
