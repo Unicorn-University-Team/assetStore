@@ -7,7 +7,7 @@ import { FileStorage } from '../storage/file-storage';
 import { HttpError } from '@assetstore/shared';
 import { parseRange, previewContentType } from '../utils/preview';
 import { receiveUpload } from '../utils/receiveUpload';
-import { normalizeTagList, tagListFromForm } from '../utils/tags';
+import { MAX_TAGS_PER_ASSET, normalizeTagList, tagListFromForm } from '../utils/tags';
 import { toAssetView } from '../views/asset.view';
 
 type IdParams = { id: string };
@@ -57,6 +57,16 @@ function readOwnerId(value: unknown): string | null {
   return value.toLowerCase();
 }
 
+// asset/list filter by tags (AND): tag names, one parameter per tag (?tagList=medieval&tagList=low-poly), the same
+// format and rules as tagList of asset/create. One parameter comes as a string, several as an array.
+function readTagFilter(value: unknown): string[] {
+  const list = typeof value === 'string' ? [value] : value;
+  if (Array.isArray(list) && list.length > MAX_TAGS_PER_ASSET) {
+    throw new HttpError(400, `Filter by at most ${MAX_TAGS_PER_ASSET} tags`);
+  }
+  return normalizeTagList(list);
+}
+
 // Whole number from the query string (always a string there, or an array if the parameter is repeated).
 // max = null means no upper limit.
 function readInteger(field: string, value: unknown, min: number, max: number | null, fallback: number): number {
@@ -93,9 +103,10 @@ export const AssetController = {
   async list(req: Request, res: Response) {
     const search = readSearchName(req.query.name);
     const ownerId = readOwnerId(req.query.ownerId);
+    const tagNames = readTagFilter(req.query.tagList);
     const pageIndex = readInteger('pageIndex', req.query.pageIndex, 0, null, 0);
     const pageSize = readInteger('pageSize', req.query.pageSize, 1, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE);
-    const { items, total } = await AssetModel.findPage({ name: search, ownerId, pageIndex, pageSize });
+    const { items, total } = await AssetModel.findPage({ name: search, ownerId, tagNames, pageIndex, pageSize });
 
     const ownerNames = await IdentityClient.usernames(items.map((asset) => asset.ownerId));
     res.json({ itemList: items.map((asset) => toAssetView(asset, ownerNames)), pageInfo: { pageIndex, pageSize, total } });
@@ -107,7 +118,7 @@ export const AssetController = {
     const actor = readActor(res);
     const pageIndex = readInteger('pageIndex', req.query.pageIndex, 0, null, 0);
     const pageSize = readInteger('pageSize', req.query.pageSize, 1, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE);
-    const { items, total } = await AssetModel.findPage({ name: '', ownerId: actor.id, pageIndex, pageSize });
+    const { items, total } = await AssetModel.findPage({ name: '', ownerId: actor.id, tagNames: [], pageIndex, pageSize });
 
     const ownerNames = await IdentityClient.usernames([actor.id]);
     res.json({ itemList: items.map((asset) => toAssetView(asset, ownerNames)), pageInfo: { pageIndex, pageSize, total } });

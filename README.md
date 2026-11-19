@@ -327,6 +327,7 @@ curl -b cookies.txt -F name='Meč' -F type=3d -F description='Low poly' -F tagLi
 curl 'http://localhost:3002/api/assets?name=meč&pageIndex=0&pageSize=20'
 curl -b cookies.txt 'http://localhost:3002/api/assets/my'      # moje assety (My assets), jen přihlášený
 curl 'http://localhost:3002/api/assets?ownerId=<id uživatele>'   # assety jednoho uživatele
+curl 'http://localhost:3002/api/assets?tagList=medieval&tagList=low-poly'   # jen assety se všemi těmito tagy
 curl -OJ http://localhost:3002/api/assets/<id>/download     # uloží soubor pod původním jménem
 curl -b cookies.txt -X DELETE http://localhost:3002/api/assets/<id>
 ```
@@ -557,7 +558,7 @@ Endpointy mají **catalog** (assety), **identity** (přihlášení, viz [Přihl�
 | Metoda | Cesta | Co dělá |
 |---|---|---|
 | `GET` | `/api/health/<služba>` | stav služby `identity`, `catalog` nebo `community`: `{ service, status, database }` (catalog i `storage`), při chybě 503 |
-| `GET` | `/api/assets?name=&ownerId=&pageIndex=&pageSize=` | seznam od nejnovějších, hledání v názvu bez ohledu na velikost písmen (`%` a `_` jsou obyčejné znaky); `ownerId` (uuid, jinak 400) vrátí jen assety tohoto uživatele (stránka „Moje assety“); stránky od 0, `pageSize` 1–100 (výchozí 20), jinak 400: `{ itemList, pageInfo: { pageIndex, pageSize, total } }` |
+| `GET` | `/api/assets?name=&ownerId=&tagList=&pageIndex=&pageSize=` | seznam od nejnovějších, hledání v názvu bez ohledu na velikost písmen (`%` a `_` jsou obyčejné znaky); `ownerId` (uuid, jinak 400) vrátí jen assety tohoto uživatele (stránka „Moje assety“); `tagList` = názvy tagů, parametr jednou na tag (`tagList=medieval&tagList=low-poly`), vrátí jen assety, které mají **všechny** tyto tagy; stejná pravidla jako při publikaci (velikost písmen se ignoruje, nejvýš 10, neplatný název → 400), neznámý tag → prázdný seznam; stránky od 0, `pageSize` 1–100 (výchozí 20), jinak 400: `{ itemList, pageInfo: { pageIndex, pageSize, total } }` |
 | `GET` | `/api/assets/my?pageIndex=&pageSize=` | US-1 „My assets“ (AM `asset/listMy`): jen assety přihlášeného uživatele (vlastník z tokenu), od nejnovějších, stránkování jako u seznamu; bez přihlášení **401**, žádné assety = prázdný `itemList` |
 | `GET` | `/api/assets/:id` | jeden asset |
 | `POST` | `/api/assets` | nahrání, `multipart/form-data`: `name`, `description`, `type`, `tagList` (nepovinné, viz [Tagy při publikaci](#tagy-při-publikaci-us-11)), `file`; potřebuje přihlášení |

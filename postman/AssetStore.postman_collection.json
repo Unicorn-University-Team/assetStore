@@ -351,6 +351,18 @@
                   "disabled": true
                 },
                 {
+                  "key": "tagList",
+                  "value": "medieval",
+                  "description": "Tag name; repeat the parameter for more tags. Only assets with all of them (AND), at most 10",
+                  "disabled": true
+                },
+                {
+                  "key": "tagList",
+                  "value": "low-poly",
+                  "description": "Second tag (AND)",
+                  "disabled": true
+                },
+                {
                   "key": "pageIndex",
                   "value": "0",
                   "description": "Page number from 0"
@@ -362,7 +374,7 @@
                 }
               ]
             },
-            "description": "A page of the catalogue (20 per page), newest first."
+            "description": "A page of the catalogue (20 per page), newest first. Turn on tagList to filter by tags (all of them)."
           }
         },
         {
