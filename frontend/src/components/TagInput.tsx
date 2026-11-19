@@ -3,6 +3,15 @@ import { listTags, type Tag } from '../api/tags'
 
 const TAG_NAME = /^[a-z0-9-]{1,50}$/
 const MAX_TAGS = 10
+const INVALID_NAME = 'A tag has 1 to 50 Latin letters, digits or hyphens.'
+
+// The last row of the list when the typed tag does not exist yet: US-1.1, the system offers to create it.
+type CreateOption = { id: string; name: string; create: true }
+type Option = Tag | CreateOption
+
+function isCreate(option: Option | undefined): option is CreateOption {
+  return option !== undefined && 'create' in option
+}
 
 export type TagInputHandle = {
   // Confirms whatever is still typed, then returns the tags to save.
@@ -38,15 +47,20 @@ export default function TagInput({ ref, id, tags, onChange, onError, error, disa
   const [open, setOpen] = useState(false)
 
   const visible = suggestions.filter((tag) => !tags.includes(tag.name))
-  const highlighted = visible[Math.min(active, Math.max(visible.length - 1, 0))]
+  // A valid typed name that is not in the catalogue yet (and not on the asset) can be created after a confirmation.
+  const typed = normalizeTag(draft)
+  const offerCreate = TAG_NAME.test(typed) && !tags.includes(typed) && !suggestions.some((tag) => tag.name === typed)
+  const options: Option[] = offerCreate ? [...visible, { id: 'create', name: typed, create: true }] : visible
+  const highlighted = options[Math.min(active, Math.max(options.length - 1, 0))]
 
-  const addName = useCallback(async (raw: string, current: string[]) => {
+  // confirmed = the user chose "Create tag": the tag goes on the asset and the catalogue creates it on publish.
+  // Without it, a tag that does not exist is not added (US-1.1, the user did not confirm).
+  const addName = useCallback(async (raw: string, current: string[], confirmed = false) => {
     const name = normalizeTag(raw)
     if (!name) return { tags: current, error: '' }
     if (!TAG_NAME.test(name)) {
-      const message = 'The tag does not exist.'
-      onError(message)
-      return { tags: current, error: message }
+      onError(INVALID_NAME)
+      return { tags: current, error: INVALID_NAME }
     }
     if (current.includes(name)) {
       setDraft('')
@@ -59,10 +73,11 @@ export default function TagInput({ ref, id, tags, onChange, onError, error, disa
       return { tags: current, error: message }
     }
     try {
-      const found = await listTags(name)
-      if (!found.some((tag) => tag.name === name)) {
-        const message = 'The tag does not exist.'
+      const found = confirmed ? [] : await listTags(name)
+      if (!confirmed && !found.some((tag) => tag.name === name)) {
+        const message = `The tag “${name}” does not exist yet. Choose “Create tag” to add it.`
         onError(message)
+        setOpen(true)
         return { tags: current, error: message }
       }
     } catch (cause) {
@@ -105,31 +120,37 @@ export default function TagInput({ ref, id, tags, onChange, onError, error, disa
     function onPointer(event: MouseEvent) {
       if (!fieldRef.current?.contains(event.target as Node)) setOpen(false)
     }
-    // Wait until the click that opened the list has finished, or that same click closes it.
-    const timer = window.setTimeout(() => document.addEventListener('mousedown', onPointer), 0)
+    // On click, not mousedown: closing the list moves the form up, and on mousedown that would move a button
+    // (e.g. Publish) away before the click ends, so the click would be lost. Wait until the click that opened
+    // the list has finished, or that same click closes it.
+    const timer = window.setTimeout(() => document.addEventListener('click', onPointer), 0)
     return () => {
       window.clearTimeout(timer)
-      document.removeEventListener('mousedown', onPointer)
+      document.removeEventListener('click', onPointer)
     }
   }, [open])
 
+  function choose(option: Option) {
+    void addName(option.name, tags, isCreate(option))
+  }
+
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === 'ArrowDown' && visible.length) {
+    if (event.key === 'ArrowDown' && options.length) {
       event.preventDefault()
-      setActive((index) => Math.min(index + 1, visible.length - 1))
-    } else if (event.key === 'ArrowUp' && visible.length) {
+      setActive((index) => Math.min(index + 1, options.length - 1))
+    } else if (event.key === 'ArrowUp' && options.length) {
       event.preventDefault()
       setActive((index) => Math.max(index - 1, 0))
     } else if (event.key === 'Enter' && open && highlighted) {
       event.preventDefault()
-      void addName(highlighted.name, tags)
+      choose(highlighted)
     } else if (event.key === 'Enter' && !normalizeTag(draft)) {
       // Empty field with the list closed: let the form submit.
     } else if (event.key === 'Enter' || event.key === ',') {
       event.preventDefault()
-      const chosen = event.key === 'Enter' && highlighted ? highlighted.name : draft
-      if (normalizeTag(chosen)) void addName(chosen, tags)
-    } else if (event.key === 'Escape') {
+      // A comma adds an existing tag only; a new one still needs "Create tag".
+      if (normalizeTag(draft)) void addName(draft, tags)
+    } else if (event.key === 'Escape' || event.key === 'Tab') {
       setOpen(false)
     } else if (event.key === 'Backspace' && !draft && tags.length) {
       onChange(tags.slice(0, -1))
@@ -198,21 +219,21 @@ export default function TagInput({ ref, id, tags, onChange, onError, error, disa
       </div>
       {showList && (
         <div className="tag-suggestions" id={listId} role="listbox">
-          {visible.map((tag) => (
+          {options.map((option) => (
             <button
               type="button"
-              key={tag.id}
-              id={`${listId}-${tag.id}`}
+              key={option.id}
+              id={`${listId}-${option.id}`}
               role="option"
-              aria-selected={tag.id === highlighted?.id}
-              className={tag.id === highlighted?.id ? 'tag-suggestion active' : 'tag-suggestion'}
+              aria-selected={option.id === highlighted?.id}
+              className={`tag-suggestion${option.id === highlighted?.id ? ' active' : ''}${isCreate(option) ? ' tag-create' : ''}`}
               onMouseDown={(event) => event.preventDefault()}
-              onClick={() => { void addName(tag.name, tags) }}
+              onClick={() => choose(option)}
             >
-              {tag.name}
+              {isCreate(option) ? <>+ Create tag “<strong>{option.name}</strong>”</> : option.name}
             </button>
           ))}
-          {visible.length === 0 && <p className="tag-empty">{draft.trim() ? 'No matching tags' : 'No tags yet'}</p>}
+          {options.length === 0 && <p className="tag-empty">{draft.trim() ? 'No matching tags' : 'No tags yet'}</p>}
         </div>
       )}
     </div>

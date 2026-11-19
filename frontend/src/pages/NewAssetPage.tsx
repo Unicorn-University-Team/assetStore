@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent, type FormEvent } from 'react'
+import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getCurrentUser } from '../api/auth'
 import {
@@ -13,6 +13,7 @@ import {
 import { useAuth } from '../auth/auth-context'
 import FormField from '../components/FormField'
 import InlineError from '../components/InlineError'
+import TagInput, { type TagInputHandle } from '../components/TagInput'
 
 const TYPE_LABELS: Record<AssetType, string> = {
   '2d': '2D',
@@ -29,6 +30,7 @@ type FormErrors = {
   description?: string
   type?: string
   file?: string
+  tags?: string
 }
 
 function fileProblem(file: File): string | undefined {
@@ -50,15 +52,19 @@ function summary(errors: FormErrors): string {
 export default function NewAssetPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const tagsRef = useRef<TagInputHandle>(null)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [type, setType] = useState<AssetType | ''>('')
   const [file, setFile] = useState<File | null>(null)
+  const [tags, setTags] = useState<string[]>([])
   const [errors, setErrors] = useState<FormErrors>({})
   const [formError, setFormError] = useState('')
   const [busy, setBusy] = useState(false)
   const suspended = user?.status === 'SUSPENDED'
   const locked = busy || suspended
+  // Required fields (US-1): name, type and file. The button stays off until each one has a value.
+  const canPublish = name.trim() !== '' && type !== '' && file !== null
 
   function clearField(field: keyof FormErrors) {
     setFormError('')
@@ -75,7 +81,7 @@ export default function NewAssetPage() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (busy) return
+    if (busy || !canPublish) return
     setBusy(true)
     setFormError('')
     try {
@@ -101,6 +107,12 @@ export default function NewAssetPage() {
       if (!file) next.file = 'Attach the asset file.'
       else next.file = fileProblem(file)
 
+      // Tags are existing ones or new ones the user confirmed with "Create tag" (US-1.1); the catalogue creates
+      // the new ones together with the asset. A tag still typed but not confirmed stops the publishing.
+      const committed = (await tagsRef.current?.commit()) ?? { tags, error: '' }
+      if (committed.error) next.tags = committed.error
+      else if (committed.tags.length > 10) next.tags = 'You can add at most 10 tags.'
+
       setErrors(next)
       const problem = summary(next)
       if (problem || !file || !type) {
@@ -117,6 +129,7 @@ export default function NewAssetPage() {
         description: description.trim(),
         type,
         file,
+        tags: committed.tags,
       })
       navigate(`/assets/${encodeURIComponent(asset.id)}`)
     } catch (cause) {
@@ -197,9 +210,23 @@ export default function NewAssetPage() {
             />
           </div>
         </FormField>
-        {/* Preview and tags (TagInput) come back once the catalog stores them. */}
+        {/* Preview: comes back once the catalogue stores a preview image (not part of US-1). */}
+        <FormField id="asset-tags" label="Tags" error={errors.tags}>
+          <TagInput
+            ref={tagsRef}
+            id="asset-tags"
+            tags={tags}
+            disabled={locked}
+            error={errors.tags}
+            onChange={setTags}
+            onError={(message) => {
+              setFormError('')
+              setErrors((current) => ({ ...current, tags: message || undefined }))
+            }}
+          />
+        </FormField>
         <div className="form-actions">
-          <button type="submit" className="button button-primary publish-button" disabled={locked}>
+          <button type="submit" className={`button button-primary publish-button${busy ? ' is-busy' : ''}`} disabled={locked || !canPublish}>
             {busy ? 'Publishing…' : 'Publish'}
           </button>
         </div>

@@ -74,7 +74,12 @@ export default function SearchBar({
           ×
         </button>
       )}
-      <button className="search-button" type="submit" aria-label="Search">⌕</button>
+      <button className="search-button" type="submit" aria-label="Search">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+          <circle cx="7" cy="7" r="4.25" />
+          <path d="M10.5 10.5 L13.5 13.5" strokeLinecap="round" />
+        </svg>
+      </button>
     </form>
   )
 }
