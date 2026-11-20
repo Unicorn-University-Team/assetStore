@@ -1,9 +1,11 @@
+import { requireAuth } from '@assetstore/shared';
 import { Router } from 'express';
 import { loadPublicKey } from '../auth/jwt';
-import { requireAuth } from '@assetstore/shared';
-import {CollectionController} from "../controllers/collection.controller"
+import { CollectionController } from '../controllers/collection.controller';
 
-export const collectionRouter = Router();
+// /api/collections: the logged-in user's own collections.
+export const collectionRoutes = Router();
 
-collectionRouter.post("/", requireAuth(loadPublicKey), CollectionController.create)
-collectionRouter.get("/", requireAuth(loadPublicKey), CollectionController.listByOwner)
+collectionRoutes.use(requireAuth(loadPublicKey));
+collectionRoutes.post('/', CollectionController.create);
+collectionRoutes.get('/', CollectionController.listMy);

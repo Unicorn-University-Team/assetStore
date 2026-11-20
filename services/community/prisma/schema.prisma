@@ -53,8 +53,8 @@ model Review {
   @@map("review")
 }
 
-// A user's collection of assets (COL-1…2). The owner comes from the access token, never from the request. A private
-// collection is seen only by its owner. The owner lives in identity, so only the id is stored here.
+// A user's collection of assets (COL-1…2). The owner comes from the access token, never from the request, and only the
+// owner sees the collection. The owner lives in identity, so only the id is stored here.
 model Collection {
   id          String            @id @default(uuid()) @db.Uuid
   ownerId     String            @map("owner_id") @db.Uuid

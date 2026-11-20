@@ -1,20 +1,15 @@
-import { prisma } from "../db/prisma"
+import { prisma } from '../db/prisma';
+import type { Collection } from '../generated/prisma/client';
 
-export const CollectionModel ={
+export type { Collection };
 
-         async create(data: {ownerId: string, name: string, description?: string}){
-          return await prisma.collection.create({
-                data:{
-                    ownerId: data.ownerId,
-                    name: data.name,
-                    description: data.description,
-                }
-            })
-        },
+export const CollectionModel = {
+  create(data: { ownerId: string; name: string; description: string }) {
+    return prisma.collection.create({ data });
+  },
 
-        async listByOwner(ownerId: string){
-            return await prisma.collection.findMany({
-                where: {ownerId}
-            })
-        }
-}
+  // Newest first; the id breaks ties so the order is always the same.
+  listByOwner(ownerId: string) {
+    return prisma.collection.findMany({ where: { ownerId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
+  },
+};
