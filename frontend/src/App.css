@@ -315,3 +315,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 /* US-1.1: the last row of the tag list offers to create the typed tag. */
 .tag-suggestion.tag-create { border-top: 1px solid #d9e2ff; font-weight: 500; }
 .tag-suggestion.tag-create strong { font-weight: 700; }
+
+/* Shared Admin layout & navigation styles (Authentication & roles / US-6, US-7, US-8) */
+.admin-badge { padding: 3px 8px; border: 1px solid #5c4a14; border-radius: 4px; color: #e8b94a; background: #2b2410; font-size: 11px; font-weight: 700; }
+.admin-nav { flex: 1; display: flex; align-items: center; gap: 22px; margin-left: 8px; }
+.admin-nav a { padding: 6px 0; border-bottom: 2px solid transparent; color: #fff; font-size: 13px; font-weight: 600; text-decoration: none; }
+.admin-nav a.active { border-bottom-color: #fff; }
+@media (max-width: 600px) {
+  .admin-nav { order: 3; flex-basis: 100%; margin-left: 0; gap: 18px; }
+  .admin-header .header-account { margin-left: auto; }
+  .admin-header .header-user-name { display: none; }
+}
