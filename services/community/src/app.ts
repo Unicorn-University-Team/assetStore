@@ -2,6 +2,7 @@ import { errorHandler, notFound } from '@assetstore/shared';
 import cookieParser from 'cookie-parser';
 import express from 'express';
 import { prisma } from './db/prisma';
+import { collectionRoutes } from './routes/collection.routes';
 import { assetReportRoutes, reportRoutes } from './routes/report.routes';
 import { assetReviewRoutes } from './routes/review.routes';
 
@@ -29,6 +30,7 @@ app.get('/health', async (_req, res) => {
 app.use('/api/assets/:assetId/reports', assetReportRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/assets/:assetId/reviews', assetReviewRoutes);
+app.use('/api/collections', collectionRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

@@ -386,6 +386,21 @@ jako u reportů se ukládají jen id assetu a autora, vlastníka assetu communit
   `averageRating` (zaokrouhlený na jedno desetinné místo) a `reviewCount`. `authorName` je `null`, když identity
   neodpoví.
 
+## Kolekce
+
+Kolekce jsou ve službě **community** (tabulky `collection` a `collection_asset`,
+`services/community/src/models/collection.model.ts`). Vlastník se bere z tokenu, nikdy z požadavku, a kolekce
+vidí jen on.
+
+| Metoda | Cesta | Kdo | Co dělá |
+|---|---|---|---|
+| `POST` | `/api/collections` | přihlášený | COL-1: `{ name, description? }` → **201** kolekce |
+| `GET` | `/api/collections` | přihlášený | vlastní kolekce od nejnovějších: `{ itemList }` |
+
+- `name` je povinný, 1–100 znaků, `description` nepovinný, nejvýš 2000 znaků (obojí se ořízne), jinak **400**.
+  Bez přihlášení **401**.
+- **Kolekce v odpovědi:** `id`, `ownerId`, `name`, `description`, `createdAt`.
+
 ## Přihlášení
 
 Registraci a přihlášení dělá služba identity:
@@ -569,7 +584,8 @@ a bez CORS.
 ## API
 
 Endpointy mají **catalog** (assety), **identity** (přihlášení, viz [Přihlášení](#přihlášení)) a **community**
-(reporty a recenze, viz [Nahlášení assetů](#nahlášení-assetů-reporty) a [Recenze](#recenze)). Všechno se dá vyzkoušet v Postmanu, viz [Postman](#postman) níže.
+(reporty, recenze a kolekce, viz [Nahlášení assetů](#nahlášení-assetů-reporty), [Recenze](#recenze) a
+[Kolekce](#kolekce)). Všechno se dá vyzkoušet v Postmanu, viz [Postman](#postman) níže.
 
 | Metoda | Cesta | Co dělá |
 |---|---|---|
