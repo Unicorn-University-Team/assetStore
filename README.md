@@ -377,6 +377,7 @@ jako u reportů se ukládají jen id assetu a autora, vlastníka assetu communit
 
 | Metoda | Cesta | Kdo | Co dělá |
 |---|---|---|---|
+| `GET` | `/api/assets/:id/reviews` | kdokoli | recenze assetu od nejnovějších: `?pageIndex=&pageSize=` → `{ itemList, pageInfo }` |
 | `POST` | `/api/assets/:id/reviews` | přihlášený | US-4: `{ rating, comment? }` → **201** recenze |
 
 - `rating` je celé číslo 1–5 (i CHECK v databázi), `comment` je nepovinný, nejvýš 2000 znaků; prázdný = `null`.
@@ -385,6 +386,9 @@ jako u reportů se ukládají jen id assetu a autora, vlastníka assetu communit
 - **Odpověď:** `id`, `assetId`, `authorId`, `authorName`, `rating`, `comment`, `createdAt` a nový stav assetu
   `averageRating` (zaokrouhlený na jedno desetinné místo) a `reviewCount`. `authorName` je `null`, když identity
   neodpoví.
+- **Seznam:** stránky od 0, `pageSize` 1–100 (výchozí 20), jinak **400**; neplatné id assetu → **400**. Existenci
+  assetu se catalogu neptá: neznámý asset prostě nemá recenze (prázdný `itemList`). Položka má stejná pole jako
+  odpověď na `POST`, bez `averageRating` a `reviewCount`.
 
 ## Kolekce
 
