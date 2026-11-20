@@ -5,6 +5,7 @@ import { CatalogClient } from './clients/catalog.client';
 import { env } from './config/env';
 import { prisma } from './db/prisma';
 import { assetReportRoutes, reportRoutes } from './routes/report.routes';
+import { collectionRouter } from './routes/collection.routes';
 
 export const app = express();
 
@@ -29,6 +30,7 @@ app.get('/health', async (_req, res) => {
 //   /api/assets/:id/reports, /api/reports/...    reports
 app.use('/api/assets/:assetId/reports', assetReportRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/collections', collectionRouter)
 
 // Temporary check of community -> catalog communication; remove once reviews call CatalogClient themselves.
 async function checkAsset(req: Request<{ id: string }>, res: Response) {
