@@ -8,6 +8,7 @@ import ReportStatusBadge from '../components/ReportStatusBadge'
 import { formatDateTime } from '../formatDate'
 import { useLiveTick } from '../useLiveTick'
 import { usePageTitle } from '../usePageTitle'
+import StatusFilter from '../components/StatusFilter'
 
 const FILTERS: { value: ReportStatusFilter; label: string }[] = [
   { value: 'open', label: 'Open' },
@@ -96,13 +97,7 @@ export default function AdminReportsPage() {
           <button type="button" className="text-link" onClick={() => setNotice('')}>Dismiss</button>
         </p>
       )}
-      <div className="filter-tabs" role="group" aria-label="Filter by status">
-        {FILTERS.map((item) => (
-          <button type="button" key={item.value} aria-pressed={status === item.value} onClick={() => changeFilter(item.value)}>
-            {item.label}
-          </button>
-        ))}
-      </div>
+      <StatusFilter label="Filter by status" options={FILTERS} value={status} onChange={changeFilter} />
       {loading && <StatusMessage kind="loading" title="Loading reports" />}
       {!loading && error && (
         <StatusMessage kind="error" title="Could not load the reports" message={error}>
