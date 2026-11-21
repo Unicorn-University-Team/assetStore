@@ -1,8 +1,10 @@
-import { errorHandler, notFound } from '@assetstore/shared';
+import { errorHandler, notFound, requireInternalKey } from '@assetstore/shared';
 import cookieParser from 'cookie-parser';
 import express from 'express';
+import { env } from './config/env';
 import { prisma } from './db/prisma';
 import { collectionRoutes } from './routes/collection.routes';
+import { internalRoutes } from './routes/internal.routes';
 import { assetReportRoutes, reportRoutes } from './routes/report.routes';
 import { assetReviewRoutes } from './routes/review.routes';
 
@@ -31,6 +33,9 @@ app.use('/api/assets/:assetId/reports', assetReportRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/assets/:assetId/reviews', assetReviewRoutes);
 app.use('/api/collections', collectionRoutes);
+
+// For other services only (X-Internal-Key); Caddy does not route /internal from outside.
+app.use('/internal', requireInternalKey(env.internalKey), internalRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

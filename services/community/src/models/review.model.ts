@@ -1,5 +1,11 @@
 import { prisma } from '../db/prisma';
 
+export interface AssetRatingSummary {
+  assetId: string;
+  averageRating: number | null;
+  reviewCount: number;
+}
+
 export const ReviewModel = {
   // A second review of the same asset by the same user fails on the unique (authorId, assetId): Prisma P2002.
   create(data: { assetId: string; authorId: string; rating: number; comment: string | null }) {
@@ -33,5 +39,21 @@ export const ReviewModel = {
       averageRating: average === null ? null : Math.round(average * 10) / 10,
       reviewCount: summary._count._all,
     };
+  },
+
+  async ratingSummaries(assetIds: string[]): Promise<AssetRatingSummary[]> {
+    const groups = await prisma.review.groupBy({
+      by: ['assetId'],
+      where: { assetId: { in: assetIds } },
+      _avg: { rating: true },
+      _count: { _all: true },
+    });
+
+    const assetReviewList = groups.map((group) => ({
+      assetId: group.assetId,
+      reviewCount: group._count._all,
+      averageRating: group._avg.rating === null ? null : Math.round(group._avg.rating * 10) / 10,
+    }));
+    return assetReviewList;
   },
 };
