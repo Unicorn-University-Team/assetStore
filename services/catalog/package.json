@@ -17,7 +17,9 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "test:us2": "vitest run test/us-2-permissions.test.ts",
+    "typecheck:tests": "tsc --project tsconfig.test.json"
   },
   "dependencies": {
     "@assetstore/shared": "*",
@@ -40,6 +42,7 @@
     "@types/node": "^24.0.0",
     "@types/pg": "^8.23.1",
     "tsx": "^4.23.15",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
   }
 }
