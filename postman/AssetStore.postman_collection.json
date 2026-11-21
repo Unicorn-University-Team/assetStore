@@ -812,7 +812,7 @@
                 "reports"
               ]
             },
-            "description": "Report the asset in assetId (Assets → List sets it). Needs Login. reason: copyright | inappropriate | malware | spam | other; comment at most 500 characters. Own asset 403, second open report 409.",
+            "description": "Report the asset in assetId (Assets → List sets it). Needs Login. reason: inappropriateContent | copyright | spam | brokenFile | other; comment at most 500 characters. Own asset 403, second open report 409.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"reason\": \"spam\",\n  \"comment\": \"\"\n}"

@@ -56,14 +56,12 @@ async function findReport(id: string): Promise<Report> {
   return report;
 }
 
-// Asset names from catalog and user names from identity, one call each for all the reports.
-// Names are only for display: when catalog fails, the reports are still shown, without asset names.
+// User names from identity, one call for all the reports. The asset name is stored in the report itself.
 async function namesFor(reports: Report[]): Promise<ReportNames> {
-  const [assets, users] = await Promise.all([
-    CatalogClient.assetSummaries(reports.map((report) => report.assetId)).catch(() => new Map()),
-    IdentityClient.usernames(reports.flatMap((report) => [report.authorId, report.assetOwnerId, report.decidedBy])),
-  ]);
-  return { assets, users };
+  const users = await IdentityClient.usernames(
+    reports.flatMap((report) => [report.authorId, report.assetOwnerId, report.decidedBy]),
+  );
+  return { users };
 }
 
 export const ReportController = {
@@ -79,7 +77,14 @@ export const ReportController = {
     if (!asset) throw new HttpError(404, 'Asset not found');
     if (asset.ownerId === authorId) throw new HttpError(403, 'You cannot report your own asset');
 
-    const report = await ReportModel.create({ assetId, assetOwnerId: asset.ownerId, authorId, reason, comment });
+    const report = await ReportModel.create({
+      assetId,
+      assetName: asset.name,
+      assetOwnerId: asset.ownerId,
+      authorId,
+      reason,
+      comment,
+    });
     res.status(201).json(toReportView(report));
   },
 
