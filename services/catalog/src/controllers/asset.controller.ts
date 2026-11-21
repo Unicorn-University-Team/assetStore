@@ -183,7 +183,11 @@ export const AssetController = {
     const asset = UUID.test(req.params.id) ? await AssetModel.update(req.params.id, input, actor) : null;
     if (!asset) throw new HttpError(404, 'Asset not found');
 
-    res.json(toAssetView(asset, await IdentityClient.usernames([asset.ownerId])));
+    const [ownerNames, ratings] = await Promise.all([
+      IdentityClient.usernames([asset.ownerId]),
+      CommunityClient.ratings([asset.id]),
+    ]);
+    res.json(toAssetView(asset, ownerNames, ratings));
   },
 
   async remove(req: Request<IdParams>, res: Response) {
