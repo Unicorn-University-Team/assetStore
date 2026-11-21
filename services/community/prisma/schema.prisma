@@ -18,8 +18,7 @@ model Report {
   id           String    @id @default(uuid()) @db.Uuid
   assetId      String    @map("asset_id") @db.Uuid
   // Copy of the asset name when it was reported, kept for the history after the asset is deleted (AM reportSchema).
-  // null only for reports filed before the column existed whose asset was already gone.
-  assetName    String?   @map("asset_name") @db.VarChar(100)
+  assetName    String    @map("asset_name") @db.VarChar(100)
   // Owner of the asset when it was reported (from catalog); stays known even after the asset is deleted.
   assetOwnerId String?   @map("asset_owner_id") @db.Uuid
   // Who reported it.
