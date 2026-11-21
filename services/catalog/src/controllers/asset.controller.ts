@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { pipeline } from 'node:stream/promises';
 import { env } from '../config/env';
 import { ALLOWED_EXTENSIONS, ASSET_TYPES, AssetModel, type Actor, type Asset, type AssetType } from '../models/asset.model';
+import { CommunityClient } from '../clients/community.client';
 import { IdentityClient } from '../clients/identity.client';
 import { FileStorage } from '../storage/file-storage';
 import { HttpError } from '@assetstore/shared';
@@ -108,8 +109,12 @@ export const AssetController = {
     const pageSize = readInteger('pageSize', req.query.pageSize, 1, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE);
     const { items, total } = await AssetModel.findPage({ name: search, ownerId, tagNames, pageIndex, pageSize });
 
-    const ownerNames = await IdentityClient.usernames(items.map((asset) => asset.ownerId));
-    res.json({ itemList: items.map((asset) => toAssetView(asset, ownerNames)), pageInfo: { pageIndex, pageSize, total } });
+    // One call per service for the whole page, at the same time.
+    const [ownerNames, ratings] = await Promise.all([
+      IdentityClient.usernames(items.map((asset) => asset.ownerId)),
+      CommunityClient.ratings(items.map((asset) => asset.id)),
+    ]);
+    res.json({ itemList: items.map((asset) => toAssetView(asset, ownerNames, ratings)), pageInfo: { pageIndex, pageSize, total } });
   },
 
   // GET /api/assets/my (AM asset/listMy, US-1 "My assets"): only the logged-in user's assets, newest first, the same
@@ -120,13 +125,20 @@ export const AssetController = {
     const pageSize = readInteger('pageSize', req.query.pageSize, 1, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE);
     const { items, total } = await AssetModel.findPage({ name: '', ownerId: actor.id, tagNames: [], pageIndex, pageSize });
 
-    const ownerNames = await IdentityClient.usernames([actor.id]);
-    res.json({ itemList: items.map((asset) => toAssetView(asset, ownerNames)), pageInfo: { pageIndex, pageSize, total } });
+    const [ownerNames, ratings] = await Promise.all([
+      IdentityClient.usernames([actor.id]),
+      CommunityClient.ratings(items.map((asset) => asset.id)),
+    ]);
+    res.json({ itemList: items.map((asset) => toAssetView(asset, ownerNames, ratings)), pageInfo: { pageIndex, pageSize, total } });
   },
 
   async getById(req: Request<IdParams>, res: Response) {
     const asset = await findAsset(req.params.id);
-    res.json(toAssetView(asset, await IdentityClient.usernames([asset.ownerId])));
+    const [ownerNames, ratings] = await Promise.all([
+      IdentityClient.usernames([asset.ownerId]),
+      CommunityClient.ratings([asset.id]),
+    ]);
+    res.json(toAssetView(asset, ownerNames, ratings));
   },
 
   // multipart/form-data: name, description, type, tagList (optional, one field per tag or a JSON array), file
