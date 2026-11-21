@@ -158,7 +158,6 @@ function WorkspaceHeader() {
 
 const ADMIN_LINKS = [
   { to: '/admin/reports', label: 'Reports', showOpenCount: true },
-  { to: '/admin/users', label: 'Suspended users', showOpenCount: false },
 ]
 
 function AdminHeader() {

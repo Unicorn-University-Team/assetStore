@@ -4,13 +4,12 @@ import { describeFailure } from '../api/client'
 import { listReports, reasonLabel, type Report, type ReportPage, type ReportStatusFilter } from '../api/reports'
 import DataTable, { type Column } from '../components/DataTable'
 import Pagination from '../components/Pagination'
-import StatusMessage from '../components/StatusMessage'
 import ReportStatusBadge from '../components/ReportStatusBadge'
+import StatusFilter from '../components/StatusFilter'
+import StatusMessage from '../components/StatusMessage'
 import { formatDateTime } from '../formatDate'
 import { useLiveTick } from '../useLiveTick'
 import { usePageTitle } from '../usePageTitle'
-import StatusFilter from '../components/StatusFilter'
-
 
 const FILTERS: { value: ReportStatusFilter; label: string }[] = [
   { value: 'open', label: 'Open' },
@@ -137,7 +136,7 @@ export default function AdminReportsPage() {
   rows={reports}
   getRowKey={(report) => report.id}
   onRowClick={(report) => navigate(`/admin/reports/${report.id}`)}
-/>
+        />
       )}
       {!loading && !error && result && (
         <Pagination page={page} pageSize={result.pageSize} total={result.total} onChange={changePage} />
