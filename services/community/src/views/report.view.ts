@@ -5,7 +5,7 @@ import type { Report } from '../models/report.model';
 export interface ReportView {
   id: string;
   assetId: string;
-  assetName: string | null;
+  assetName: string;
   assetOwnerId: string | null;
   assetOwnerName: string | null;
   authorId: string;
