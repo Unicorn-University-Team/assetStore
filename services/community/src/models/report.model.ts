@@ -1,18 +1,20 @@
 import { HttpError } from '@assetstore/shared';
 import { prisma } from '../db/prisma';
-import type { Report } from '../generated/prisma/client';
+import { Prisma, type Report } from '../generated/prisma/client';
 import { AuditLogModel } from './audit-log.model';
 
 export type { Report };
 
-// Same lists as the CHECK constraints in the add_report migration and REPORT_REASONS in the frontend.
-export const REPORT_REASONS = ['copyright', 'inappropriate', 'malware', 'spam', 'other'] as const;
+// Reasons from the Application Model (reportSchema). Same lists as the CHECK constraints in the migrations and
+// REPORT_REASONS in the frontend.
+export const REPORT_REASONS = ['inappropriateContent', 'copyright', 'spam', 'brokenFile', 'other'] as const;
 export type ReportReason = (typeof REPORT_REASONS)[number];
 export const REPORT_STATUSES = ['open', 'resolved', 'rejected'] as const;
 export type ReportStatus = (typeof REPORT_STATUSES)[number];
 
 export type ReportInput = {
   assetId: string;
+  assetName: string;
   assetOwnerId: string | null;
   authorId: string;
   reason: ReportReason;
@@ -20,16 +22,17 @@ export type ReportInput = {
 };
 
 export const ReportModel = {
-  // One open report per user and asset: a second one would only repeat the first.
+  // One open report per user and asset: a second one would only repeat the first. The partial unique index
+  // "report_one_open_per_author_asset" guarantees it, also for two requests at the same time.
   async create(input: ReportInput): Promise<Report> {
-    return prisma.$transaction(async (tx) => {
-      const open = await tx.report.findFirst({
-        where: { assetId: input.assetId, authorId: input.authorId, status: 'open' },
-        select: { id: true },
-      });
-      if (open) throw new HttpError(409, 'You have already reported this asset');
-      return tx.report.create({ data: input });
-    });
+    try {
+      return await prisma.report.create({ data: input });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new HttpError(409, 'You have already reported this asset');
+      }
+      throw error;
+    }
   },
 
   // Newest first; id breaks ties so that paging never repeats or skips a report. status null = all.

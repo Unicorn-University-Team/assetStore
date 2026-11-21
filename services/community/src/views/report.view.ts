@@ -1,8 +1,7 @@
-import type { AssetSummary } from '../clients/catalog.client';
 import type { Report } from '../models/report.model';
 
-// What the client sees. Names come from catalog and identity; null when the asset is deleted, the user no longer
-// exists or the other service did not answer.
+// What the client sees. assetName is the copy stored with the report (kept after the asset is deleted); user names
+// come from identity and are null when the user no longer exists or identity did not answer.
 export interface ReportView {
   id: string;
   assetId: string;
@@ -21,11 +20,10 @@ export interface ReportView {
 }
 
 export type ReportNames = {
-  assets: ReadonlyMap<string, AssetSummary>;
   users: ReadonlyMap<string, string>;
 };
 
-const NO_NAMES: ReportNames = { assets: new Map(), users: new Map() };
+const NO_NAMES: ReportNames = { users: new Map() };
 
 function userName(names: ReportNames, id: string | null): string | null {
   return (id && names.users.get(id)) ?? null;
@@ -35,7 +33,7 @@ export function toReportView(report: Report, names: ReportNames = NO_NAMES): Rep
   return {
     id: report.id,
     assetId: report.assetId,
-    assetName: names.assets.get(report.assetId)?.name ?? null,
+    assetName: report.assetName,
     assetOwnerId: report.assetOwnerId,
     assetOwnerName: userName(names, report.assetOwnerId),
     authorId: report.authorId,
