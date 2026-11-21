@@ -612,9 +612,9 @@ assetů `null`), `ownerName` jeho uživatelské jméno: catalog se na jména pt�
 viz [Komunikace mezi službami](#komunikace-mezi-službami)). Když identity neodpoví, je `ownerName` `null` a katalog
 funguje dál. `previewUrl` je adresa náhledu u obrázků do 5 MB (jinak `null`, viz [Náhled](#náhled-get-apiassetsidfile)).
 `tagList` jsou názvy tagů podle abecedy. `averageRating` (na jedno desetinné místo) a `reviewCount` v `GET /api/assets`,
-`GET /api/assets/my` a `GET /api/assets/:id` počítá community (jedno volání `GET /internal/reviews/summaries` na
-stránku). Bez recenzí, nebo když community neodpoví, je `averageRating` `null` a `reviewCount` 0 a katalog funguje dál.
-Odpovědi na `POST` a `PUT` hodnocení nenačítají, mají vždy `null` a 0:
+`GET /api/assets/my`, `GET /api/assets/:id` a `PUT /api/assets/:id` počítá community (jedno volání
+`GET /internal/reviews/summaries` na odpověď). Bez recenzí, nebo když community neodpoví, je `averageRating` `null`
+a `reviewCount` 0 a katalog funguje dál. Nový asset z `POST /api/assets` recenze ještě nemá, proto vrací `null` a 0:
 
 ```json
 {
