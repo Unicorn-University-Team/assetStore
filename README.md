@@ -379,6 +379,7 @@ jako u reportů se ukládají jen id assetu a autora, vlastníka assetu communit
 
 | Metoda | Cesta | Kdo | Co dělá |
 |---|---|---|---|
+| `GET` | `/api/assets/:id/reviews` | kdokoli | recenze assetu od nejnovějších: `?pageIndex=&pageSize=` → `{ itemList, pageInfo }` |
 | `POST` | `/api/assets/:id/reviews` | přihlášený | US-4: `{ rating, comment? }` → **201** recenze |
 
 - `rating` je celé číslo 1–5 (i CHECK v databázi), `comment` je nepovinný, nejvýš 2000 znaků; prázdný = `null`.
@@ -387,6 +388,9 @@ jako u reportů se ukládají jen id assetu a autora, vlastníka assetu communit
 - **Odpověď:** `id`, `assetId`, `authorId`, `authorName`, `rating`, `comment`, `createdAt` a nový stav assetu
   `averageRating` (zaokrouhlený na jedno desetinné místo) a `reviewCount`. `authorName` je `null`, když identity
   neodpoví.
+- **Seznam:** stránky od 0, `pageSize` 1–100 (výchozí 20), jinak **400**; neplatné id assetu → **400**. Existenci
+  assetu se catalogu neptá: neznámý asset prostě nemá recenze (prázdný `itemList`). Položka má stejná pole jako
+  odpověď na `POST`, bez `averageRating` a `reviewCount`.
 
 ## Kolekce
 
@@ -491,6 +495,7 @@ community ──GET /internal/assets/:id/exists──▶ catalog ──▶ datab
 | catalog | `GET /internal/assets/:id/exists` | `{ "exists": boolean }` | community |
 | identity | `GET /internal/users?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "id", "username" }] }`, neznámá id chybí | catalog (`ownerName`), community (jména v reportech) |
 | catalog | `GET /internal/assets?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "id", "name", "ownerId" }] }`, smazané assety chybí | community (reporty) |
+| community | `GET /internal/reviews/summaries?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "assetId", "averageRating", "reviewCount" }] }`, assety bez recenzí chybí | catalog (hodnocení assetů) |
 
 ### Nová interní cesta
 
@@ -606,7 +611,10 @@ Asset v odpovědi (`services/catalog/src/views/asset.view.ts`). `ownerId` je id 
 assetů `null`), `ownerName` jeho uživatelské jméno: catalog se na jména ptá identity (`GET /internal/users`,
 viz [Komunikace mezi službami](#komunikace-mezi-službami)). Když identity neodpoví, je `ownerName` `null` a katalog
 funguje dál. `previewUrl` je adresa náhledu u obrázků do 5 MB (jinak `null`, viz [Náhled](#náhled-get-apiassetsidfile)).
-`tagList` jsou názvy tagů podle abecedy. `averageRating` je zatím `null` a `reviewCount` 0, dokud nejsou recenze:
+`tagList` jsou názvy tagů podle abecedy. `averageRating` (na jedno desetinné místo) a `reviewCount` v `GET /api/assets`,
+`GET /api/assets/my`, `GET /api/assets/:id` a `PUT /api/assets/:id` počítá community (jedno volání
+`GET /internal/reviews/summaries` na odpověď). Bez recenzí, nebo když community neodpoví, je `averageRating` `null`
+a `reviewCount` 0 a katalog funguje dál. Nový asset z `POST /api/assets` recenze ještě nemá, proto vrací `null` a 0:
 
 ```json
 {
