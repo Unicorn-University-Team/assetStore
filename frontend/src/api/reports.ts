@@ -2,10 +2,10 @@ import { apiGet, apiPost } from './client'
 
 // Same reasons as REPORT_REASONS in services/community/src/models/report.model.ts (README, Nahlášení assetů).
 export const REPORT_REASONS = [
+  { value: 'inappropriateContent', label: 'Inappropriate content', hint: 'Offensive, violent or adult material' },
   { value: 'copyright', label: 'Copyright infringement', hint: 'Someone else’s work shared without permission' },
-  { value: 'inappropriate', label: 'Inappropriate content', hint: 'Offensive, violent or adult material' },
-  { value: 'malware', label: 'Broken or harmful file', hint: 'The file is damaged, fake or contains malware' },
   { value: 'spam', label: 'Spam or misleading', hint: 'Advertising, or not what the name and description say' },
+  { value: 'brokenFile', label: 'Broken or harmful file', hint: 'The file is damaged, fake or contains malware' },
   { value: 'other', label: 'Something else', hint: 'Tell us more in the comment' },
 ] as const
 export type ReportReason = (typeof REPORT_REASONS)[number]['value']

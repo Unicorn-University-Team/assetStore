@@ -347,9 +347,10 @@ Nahrání a smazání potřebují přihlášení: `cookies.txt` vznikne při př
 
 ## Nahlášení assetů (reporty)
 
-Reporty jsou ve službě **community** (tabulka `report`, `services/community/src/models/report.model.ts`). Asset
-a uživatelé jsou v jiných službách, proto se ukládají jen jejich id a jména se při čtení doptají catalog (název
-assetu) a identity (jména uživatelů) přes `/internal` (viz [Komunikace mezi službami](#komunikace-mezi-službami)).
+Reporty jsou ve službě **community** (tabulka `report` podle AM `reportSchema`,
+`services/community/src/models/report.model.ts`). Při nahlášení se od catalogu zjistí vlastník a **název assetu**
+a uloží se do reportu (`asset_name`), aby historie porušení zůstala čitelná i po smazání assetu. Jména uživatelů se
+při čtení doptají identity přes `/internal` (viz [Komunikace mezi službami](#komunikace-mezi-službami)).
 
 | Metoda | Cesta | Kdo | Co dělá |
 |---|---|---|---|
@@ -358,17 +359,18 @@ assetu) a identity (jména uživatelů) přes `/internal` (viz [Komunikace mezi 
 | `GET` | `/api/reports/:id` | admin | jeden report |
 | `POST` | `/api/reports/:id/reject` | admin | US-7: zamítnutí, `open` → `rejected`, zapíše `reportRejected` do audit logu |
 
-- **Důvody** (`reason`): `copyright`, `inappropriate`, `malware`, `spam`, `other`. `comment` je nepovinný, nejvýš
-  500 znaků. Stejný seznam je ve frontendu (`frontend/src/api/reports.ts`) a jako CHECK v databázi.
+- **Důvody** (`reason`, podle AM): `inappropriateContent`, `copyright`, `spam`, `brokenFile`, `other`. `comment` je
+  nepovinný, nejvýš 500 znaků. Stejný seznam je ve frontendu (`frontend/src/api/reports.ts`) a jako CHECK v databázi.
 - **Stavy:** `open` → `resolved` (US-6, přijetí: zatím chybí) nebo `rejected` (US-7). Rozhodnutý report má
   `decidedById` a `decidedAt`.
 - **Pravidla:** vlastní asset nahlásit nejde (**403**), stejný uživatel má na jeden asset nejvýš jeden otevřený
-  report (**409**), neexistující asset → **404**. Rozhodnutý report znovu zamítnout nejde (**409**). Seznam, detail
+  report (**409**; v databázi částečný unikátní index `report_one_open_per_author_asset`, platí i pro dva požadavky
+  najednou), neexistující asset → **404**. Rozhodnutý report znovu zamítnout nejde (**409**). Seznam, detail
   a zamítnutí bez role admin → **403**, bez přihlášení **401**. Bez `JWT_PUBLIC_KEY` odpoví community **503**.
 - **Report v odpovědi** (`services/community/src/views/report.view.ts`): `id`, `assetId`, `assetName`, `assetOwnerId`,
   `assetOwnerName`, `authorId`, `authorName`, `reason`, `comment`, `status`, `createdAt`, `decidedById`,
-  `decidedByName`, `decidedAt`. Jména jsou `null`, když asset nebo uživatel už neexistuje nebo služba neodpověděla;
-  `assetOwnerId` je vlastník v době nahlášení, takže zůstane i po smazání assetu.
+  `decidedByName`, `decidedAt`. `assetName` a `assetOwnerId` jsou uložené v době nahlášení, takže zůstanou i po
+  smazání assetu. Jména uživatelů jsou `null`, když uživatel už neexistuje nebo identity neodpověděla.
 
 ## Recenze
 

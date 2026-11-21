@@ -17,11 +17,13 @@ datasource db {
 model Report {
   id           String    @id @default(uuid()) @db.Uuid
   assetId      String    @map("asset_id") @db.Uuid
+  // Copy of the asset name when it was reported, kept for the history after the asset is deleted (AM reportSchema).
+  assetName    String    @map("asset_name") @db.VarChar(100)
   // Owner of the asset when it was reported (from catalog); stays known even after the asset is deleted.
   assetOwnerId String?   @map("asset_owner_id") @db.Uuid
   // Who reported it.
   authorId     String    @map("author_id") @db.Uuid
-  // copyright | inappropriate | malware | spam | other (REPORT_REASONS in ReportModel, CHECK in the migration)
+  // inappropriateContent | copyright | spam | brokenFile | other (AM; REPORT_REASONS in ReportModel, CHECK in the migration)
   reason       String    @db.VarChar(20)
   comment      String    @default("") @db.VarChar(500)
   // open | resolved | rejected (CHECK in the migration)
@@ -32,8 +34,10 @@ model Report {
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
+  // One open report per author and asset: partial unique index "report_one_open_per_author_asset" (only in the
+  // report_per_am migration, Prisma cannot express it).
   @@index([status, createdAt])
-  @@index([assetId, authorId])
+  @@index([assetId])
   @@map("report")
 }
 
