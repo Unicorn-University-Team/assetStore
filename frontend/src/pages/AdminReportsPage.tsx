@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { describeFailure } from '../api/client'
-import { listReports, reasonLabel, type ReportPage, type ReportStatusFilter } from '../api/reports'
+import { listReports, reasonLabel, type Report, type ReportPage, type ReportStatusFilter } from '../api/reports'
+import DataTable, { type Column } from '../components/DataTable'
 import Pagination from '../components/Pagination'
-import StatusMessage from '../components/StatusMessage'
 import ReportStatusBadge from '../components/ReportStatusBadge'
+import StatusFilter from '../components/StatusFilter'
+import StatusMessage from '../components/StatusMessage'
 import { formatDateTime } from '../formatDate'
 import { useLiveTick } from '../useLiveTick'
 import { usePageTitle } from '../usePageTitle'
@@ -14,6 +16,22 @@ const FILTERS: { value: ReportStatusFilter; label: string }[] = [
   { value: 'rejected', label: 'Rejected' },
   { value: 'resolved', label: 'Resolved' },
   { value: 'all', label: 'All' },
+  
+]
+const COLUMNS: Column<Report>[] = [
+  {
+    header: 'Asset',
+    cell: (report) => (
+      <Link to={`/admin/reports/${report.id}`} onClick={(event) => event.stopPropagation()}>
+        {report.assetName ?? <em>Deleted asset</em>}
+      </Link>
+    ),
+  },
+  { header: 'Owner', cell: (report) => report.assetOwnerName ?? '—' },
+  { header: 'Reported by', cell: (report) => report.authorName ?? '—' },
+  { header: 'Reason', cell: (report) => reasonLabel(report.reason) },
+  { header: 'Date', cell: (report) => formatDateTime(report.createdAt), className: 'nowrap' },
+  { header: 'Status', cell: (report) => <ReportStatusBadge status={report.status} /> },
 ]
 
 function readFilter(value: string | null): ReportStatusFilter {
@@ -96,13 +114,7 @@ export default function AdminReportsPage() {
           <button type="button" className="text-link" onClick={() => setNotice('')}>Dismiss</button>
         </p>
       )}
-      <div className="filter-tabs" role="group" aria-label="Filter by status">
-        {FILTERS.map((item) => (
-          <button type="button" key={item.value} aria-pressed={status === item.value} onClick={() => changeFilter(item.value)}>
-            {item.label}
-          </button>
-        ))}
-      </div>
+      <StatusFilter label="Filter by status" options={FILTERS} value={status} onChange={changeFilter} />
       {loading && <StatusMessage kind="loading" title="Loading reports" />}
       {!loading && error && (
         <StatusMessage kind="error" title="Could not load the reports" message={error}>
@@ -119,29 +131,12 @@ export default function AdminReportsPage() {
         </StatusMessage>
       )}
       {!loading && !error && reports.length > 0 && (
-        <div className="table-scroll">
-          <table className="admin-table">
-            <thead>
-              <tr><th>Asset</th><th>Owner</th><th>Reported by</th><th>Reason</th><th>Date</th><th>Status</th></tr>
-            </thead>
-            <tbody>
-              {reports.map((report) => (
-                <tr key={report.id} onClick={() => navigate(`/admin/reports/${report.id}`)}>
-                  <td>
-                    <Link to={`/admin/reports/${report.id}`} onClick={(event) => event.stopPropagation()}>
-                      {report.assetName ?? <em>Deleted asset</em>}
-                    </Link>
-                  </td>
-                  <td>{report.assetOwnerName ?? '—'}</td>
-                  <td>{report.authorName ?? '—'}</td>
-                  <td>{reasonLabel(report.reason)}</td>
-                  <td className="nowrap">{formatDateTime(report.createdAt)}</td>
-                  <td><ReportStatusBadge status={report.status} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+  columns={COLUMNS}
+  rows={reports}
+  getRowKey={(report) => report.id}
+  onRowClick={(report) => navigate(`/admin/reports/${report.id}`)}
+        />
       )}
       {!loading && !error && result && (
         <Pagination page={page} pageSize={result.pageSize} total={result.total} onChange={changePage} />

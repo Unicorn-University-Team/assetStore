@@ -156,6 +156,52 @@ function WorkspaceHeader() {
   )
 }
 
+const ADMIN_LINKS = [
+  { to: '/admin/reports', label: 'Reports', showOpenCount: true },
+]
+
+function AdminHeader() {
+  const { user, status, logout } = useAuth()
+  const [busy, setBusy] = useState(false)
+
+  async function onLogout() {
+    setBusy(true)
+    try {
+      await logout()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <header className="site-header">
+      <div className="header-inner admin-header">
+        <Link className="brand" to="/" aria-label="assetStore home">
+          <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span><span>assetStore</span>
+        </Link>
+        <span className="admin-badge">Admin</span>
+        <nav className="admin-nav" aria-label="Admin sections">
+          {ADMIN_LINKS.map((link) => (
+            <NavLink key={link.to} to={link.to} className={({ isActive }) => isActive ? 'active' : undefined}>
+              {link.label}
+              {link.showOpenCount && <OpenReportCount />}
+            </NavLink>
+          ))}
+        </nav>
+        <div className="header-account">
+          {status !== 'loading' && user && (
+            <span className="header-user">
+              <span className="header-avatar" aria-hidden="true">{initial(user.username)}</span>
+              <span className="header-user-name">{user.username}</span>
+            </span>
+          )}
+          <button className="header-login" type="button" onClick={() => { void onLogout() }} disabled={busy}>Log out</button>
+        </div>
+      </div>
+    </header>
+  )
+}
+
 function SiteFooter() {
   return (
     <footer className="site-footer">
@@ -168,12 +214,18 @@ function SiteFooter() {
 
 export default function MainLayout() {
   const { pathname } = useLocation()
+  const { user } = useAuth()
   const isAuthPage = pathname === '/login' || pathname === '/register'
   const isWorkspace = pathname === '/my' || pathname.startsWith('/my/')
+  const isAdminSection = (pathname === '/admin' || pathname.startsWith('/admin/')) && user?.role === 'ADMIN'
+
+  let header = <SiteHeader />
+  if (isWorkspace) header = <WorkspaceHeader />
+  else if (isAdminSection) header = <AdminHeader />
 
   return (
     <div className="app-shell">
-      {!isAuthPage && (isWorkspace ? <WorkspaceHeader /> : <SiteHeader />)}
+      {!isAuthPage && header}
       <PageErrorBoundary key={pathname}>
         <Outlet />
       </PageErrorBoundary>
