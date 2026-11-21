@@ -1,0 +1,8 @@
+{
+  "extends": "../../services/identity/tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "../..",
+    "noEmit": true
+  },
+  "include": ["**/*.ts", "**/*.mts"]
+}
