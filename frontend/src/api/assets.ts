@@ -1,4 +1,4 @@
-import { API_URL, apiDelete, apiGet, apiPostForm } from './client'
+import { API_URL, apiDelete, apiGet, apiPostForm, apiPut } from './client'
 
 export const ASSET_TYPES = ['2d', '3d', 'map', 'sound', 'environment'] as const
 export type AssetType = (typeof ASSET_TYPES)[number]
@@ -95,6 +95,18 @@ export function uploadAsset(asset: NewAsset): Promise<Asset> {
   for (const tag of asset.tags ?? []) form.append('tagList', tag)
   form.append('file', asset.file)
   return apiPostForm<Asset>('/assets', form)
+}
+
+export function getAsset(id: string, signal?: AbortSignal): Promise<Asset> {
+  return apiGet<Asset>(`/assets/${encodeURIComponent(id)}`, signal)
+}
+
+// US-2: name, description and tags; the type and the file stay. The tags replace the old ones; a new tag the user
+// confirmed is created by the catalogue (US-1.1).
+export type AssetChanges = { name: string; description: string; tagList: string[] }
+
+export function updateAsset(id: string, changes: AssetChanges): Promise<Asset> {
+  return apiPut<Asset>(`/assets/${encodeURIComponent(id)}`, changes)
 }
 
 export function deleteAsset(id: string): Promise<void> {

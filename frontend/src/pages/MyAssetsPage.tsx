@@ -118,7 +118,10 @@ export default function MyAssetsPage() {
           assets={assets}
           author={user?.username}
           actions={(asset) => (
-            <button type="button" className="button button-secondary" aria-label={`Delete ${asset.name}`} onClick={() => askDelete(asset)}>Delete</button>
+            <>
+              <Link className="button button-secondary" aria-label={`Edit ${asset.name}`} to={`/my/assets/${encodeURIComponent(asset.id)}/edit`}>Edit</Link>
+              <button type="button" className="button button-secondary" aria-label={`Delete ${asset.name}`} onClick={() => askDelete(asset)}>Delete</button>
+            </>
           )}
         />
       )}
