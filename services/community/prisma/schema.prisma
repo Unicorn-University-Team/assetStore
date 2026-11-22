@@ -16,7 +16,8 @@ datasource db {
 // services, so only their ids are stored here; names come from catalog and identity when reports are read.
 model Report {
   id           String    @id @default(uuid()) @db.Uuid
-  assetId      String    @map("asset_id") @db.Uuid
+  // Null for a resolved report whose asset was deleted: it stays as moderation history (AM report DAO deleteByAsset).
+  assetId      String?   @map("asset_id") @db.Uuid
   // Copy of the asset name when it was reported, kept for the history after the asset is deleted (AM reportSchema).
   assetName    String    @map("asset_name") @db.VarChar(100)
   // Owner of the asset when it was reported (from catalog); stays known even after the asset is deleted.

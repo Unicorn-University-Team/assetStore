@@ -304,6 +304,11 @@ Ve frontendu ho používá `components/AssetPreview.tsx`:
 Smazat smí vlastník assetu nebo admin, ostatní dostanou **403**. Nejdřív se smaže záznam v databázi, takže asset hned zmizí z katalogu, potom soubor v S3. Když se smazání v S3
 nepovede, chyba se zapíše do logu služby catalog a záznam zůstane smazaný.
 
+Mezi tím catalog požádá community (`DELETE /internal/assets/:assetId`), aby smazala recenze assetu, jeho položky
+v kolekcích a reporty `open` a `rejected`. Reporty `resolved` zůstanou jako historie moderace: `assetId` je `null`,
+`assetName` zůstane (AM `asset/delete` krok 5, BM US-3). Když community neodpoví, odpověď je chyba (503/502), asset už
+je smazaný (stejně jako v AM) a soubor v S3 se přesto smaže.
+
 ### Chyby
 
 | Kód | Kdy |
@@ -496,6 +501,7 @@ community ──GET /internal/assets/:id/exists──▶ catalog ──▶ datab
 | identity | `GET /internal/users?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "id", "username" }] }`, neznámá id chybí | catalog (`ownerName`), community (jména v reportech) |
 | catalog | `GET /internal/assets?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "id", "name", "ownerId" }] }`, smazané assety chybí | community (reporty) |
 | community | `GET /internal/reviews/summaries?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "assetId", "averageRating", "reviewCount" }] }`, assety bez recenzí chybí | catalog (hodnocení assetů) |
+| community | `DELETE /internal/assets/:assetId` | `{ "reviews", "collectionLinks", "reports", "keptReports" }` (počty): smaže recenze, položky kolekcí a reporty `open` a `rejected` assetu; reporty `resolved` zůstanou jako historie s `assetId: null` | catalog (smazání assetu, US-3) |
 
 ### Nová interní cesta
 

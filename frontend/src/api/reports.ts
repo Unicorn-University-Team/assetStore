@@ -19,7 +19,7 @@ export type ReportStatusFilter = ReportStatus | 'all'
 // no longer exists, or the service that knows them did not answer.
 export type Report = {
   id: string
-  assetId: string
+  assetId: string | null // null: the asset was deleted, a resolved report is kept as history
   assetName: string | null
   assetOwnerId: string | null
   assetOwnerName: string | null

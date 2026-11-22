@@ -1,5 +1,6 @@
 import { HttpError } from '@assetstore/shared';
 import type { Request, Response } from 'express';
+import { AssetContentModel } from '../models/asset-content.model';
 import { ReviewModel } from '../models/review.model';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -19,5 +20,14 @@ export const InternalController = {
     const assetReviewList = await ReviewModel.ratingSummaries(assetIds);
 
     res.json({ itemList: assetReviewList });
+  },
+
+  // DELETE /internal/assets/:assetId -> { reviews, collectionLinks, reports, keptReports } (how many rows changed).
+  // Catalog calls it after deleting the asset (US-3, AM asset/delete step 5). An asset with nothing here is fine.
+  async deleteAssetContent(req: Request<{ assetId: string }>, res: Response) {
+    const assetId = req.params.assetId.toLowerCase();
+    if (!UUID.test(assetId)) throw new HttpError(400, '"assetId" must be a UUID');
+
+    res.json(await AssetContentModel.deleteByAsset(assetId));
   },
 };

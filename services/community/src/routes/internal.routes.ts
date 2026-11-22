@@ -6,3 +6,4 @@ import { InternalController } from '../controllers/internal.controller';
 export const internalRoutes = Router();
 
 internalRoutes.get('/reviews/summaries', InternalController.ratingSummaries);
+internalRoutes.delete('/assets/:assetId', InternalController.deleteAssetContent);

@@ -99,7 +99,7 @@ export default function ReportDetailPage() {
       <dl className="report-facts">
         <div>
           <dt>Asset</dt>
-          <dd>{report.assetName ? <Link to={`/assets/${encodeURIComponent(report.assetId)}`}>{report.assetName}</Link> : 'Deleted from the catalogue'}</dd>
+          <dd>{report.assetId ? <Link to={`/assets/${encodeURIComponent(report.assetId)}`}>{report.assetName}</Link> : <>{report.assetName} (deleted from the catalogue)</>}</dd>
         </div>
         <div><dt>Owner</dt><dd>{report.assetOwnerName ?? 'Unknown'}</dd></div>
         <div><dt>Reported by</dt><dd>{report.authorName ?? 'Unknown'}</dd></div>
