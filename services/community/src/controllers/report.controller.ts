@@ -75,6 +75,10 @@ export const ReportController = {
     const assetId = req.params.assetId.toLowerCase();
     const asset = UUID.test(assetId) ? (await CatalogClient.assetSummaries([assetId])).get(assetId) : undefined;
     if (!asset) throw new HttpError(404, 'Asset not found');
+    // AM report/create step 3, BM User account BR-03: a suspended user cannot report an asset.
+    if ((await IdentityClient.status(authorId)) === 'SUSPENDED') {
+      throw new HttpError(403, 'A suspended user cannot report an asset');
+    }
     if (asset.ownerId === authorId) throw new HttpError(403, 'You cannot report your own asset');
 
     const report = await ReportModel.create({

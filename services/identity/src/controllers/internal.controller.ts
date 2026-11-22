@@ -7,8 +7,9 @@ const MAX_IDS = 100;
 
 // Answers for other services (catalog...), not for the browser. See src/routes/internal.routes.ts.
 export const InternalController = {
-  // GET /internal/users?ids=<id>,<id> -> { itemList: [{ id, username }] }. Unknown ids are left out.
-  // Catalog uses it to show who uploaded an asset (ownerName).
+  // GET /internal/users?ids=<id>,<id> -> { itemList: [{ id, username, status }] }. Unknown ids are left out.
+  // Catalog uses it to show who uploaded an asset (ownerName); community also checks that the author of a report is
+  // not suspended (status ACTIVE or SUSPENDED, AM report/create step 3).
   async usernames(req: Request, res: Response) {
     const raw = req.query.ids;
     if (typeof raw !== "string") throw new HttpError(400, '"ids" must be a comma-separated list of ids');

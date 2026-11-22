@@ -354,7 +354,7 @@ při čtení doptají identity přes `/internal` (viz [Komunikace mezi službami
 
 | Metoda | Cesta | Kdo | Co dělá |
 |---|---|---|---|
-| `POST` | `/api/assets/:id/reports` | přihlášený | US-5: `{ reason, comment? }` → **201** report |
+| `POST` | `/api/assets/:id/reports` | přihlášený | US-5: `{ reason, comment? }` → **201** report; zablokovaný uživatel (`SUSPENDED`) → **403** |
 | `GET` | `/api/reports?status=&pageIndex=&pageSize=` | admin | seznam od nejnovějších; `status` `open` (výchozí), `resolved`, `rejected` nebo `all`; stránky jako u assetů: `{ itemList, pageInfo }` |
 | `GET` | `/api/reports/:id` | admin | jeden report |
 | `POST` | `/api/reports/:id/reject` | admin | US-7: zamítnutí, `open` → `rejected`, zapíše `reportRejected` do audit logu |
@@ -363,7 +363,8 @@ při čtení doptají identity přes `/internal` (viz [Komunikace mezi službami
   nepovinný, nejvýš 500 znaků. Stejný seznam je ve frontendu (`frontend/src/api/reports.ts`) a jako CHECK v databázi.
 - **Stavy:** `open` → `resolved` (US-6, přijetí: zatím chybí) nebo `rejected` (US-7). Rozhodnutý report má
   `decidedById` a `decidedAt`.
-- **Pravidla:** vlastní asset nahlásit nejde (**403**), stejný uživatel má na jeden asset nejvýš jeden otevřený
+- **Pravidla:** vlastní asset nahlásit nejde (**403**), zablokovaný uživatel nahlásit nejde (**403**; stav se ověří
+  v identity, když neodpoví → **503**), stejný uživatel má na jeden asset nejvýš jeden otevřený
   report (**409**; v databázi částečný unikátní index `report_one_open_per_author_asset`, platí i pro dva požadavky
   najednou), neexistující asset → **404**. Rozhodnutý report znovu zamítnout nejde (**409**). Seznam, detail
   a zamítnutí bez role admin → **403**, bez přihlášení **401**. Bez `JWT_PUBLIC_KEY` odpoví community **503**.
@@ -493,7 +494,7 @@ community ──GET /internal/assets/:id/exists──▶ catalog ──▶ datab
 | Služba | Cesta | Odpověď | Kdo volá |
 |---|---|---|---|
 | catalog | `GET /internal/assets/:id/exists` | `{ "exists": boolean }` | community |
-| identity | `GET /internal/users?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "id", "username" }] }`, neznámá id chybí | catalog (`ownerName`), community (jména v reportech) |
+| identity | `GET /internal/users?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "id", "username", "status" }] }` (`ACTIVE` / `SUSPENDED`), neznámá id chybí | catalog (`ownerName`), community (jména v reportech, zablokovaný autor nesmí nahlásit asset) |
 | catalog | `GET /internal/assets?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "id", "name", "ownerId" }] }`, smazané assety chybí | community (reporty) |
 | community | `GET /internal/reviews/summaries?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "assetId", "averageRating", "reviewCount" }] }`, assety bez recenzí chybí | catalog (hodnocení assetů) |
 
