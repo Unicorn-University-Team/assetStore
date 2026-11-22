@@ -58,9 +58,11 @@ export type NewAsset = { name: string; description: string; type: AssetType; fil
 // The catalog API refuses a longer name search (400).
 export const SEARCH_MAX_LENGTH = 100
 
-export async function listAssets(search = '', page = 1, signal?: AbortSignal): Promise<AssetPage> {
+// tags: only assets that carry all of them (US-9); sent as repeated tagList parameters.
+export async function listAssets(search = '', page = 1, signal?: AbortSignal, tags: string[] = []): Promise<AssetPage> {
   const pageSize = 20
   const query = new URLSearchParams({ name: search, pageIndex: String(Math.max(0, page - 1)), pageSize: String(pageSize) })
+  for (const tag of tags) query.append('tagList', tag)
   const response = await apiGet<AssetListResponse>(`/assets?${query}`, signal)
   return {
     items: response.itemList,
