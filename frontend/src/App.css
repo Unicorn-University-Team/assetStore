@@ -155,6 +155,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .asset-card, .type-card, .breadcrumbs a, .header-publish, .header-login, .brand, .text-link { text-decoration: none; }
 .asset-card { width: 100%; color: inherit; }
 .asset-card:focus-visible { outline: 2px solid #3355e0; outline-offset: 3px; }
+.asset-card-with-actions { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.asset-card-actions { display: flex; gap: 6px; }.asset-card-actions .button { flex: 1; min-height: 32px; padding-inline: 8px; font-size: 11px; }
 .type-card { color: inherit; }
 .breadcrumbs a { color: #3355e0; }
 .search-clear { width: 34px; border: 1px solid #303030; border-left: 0; color: #ddd; background: #1a1a1a; font-size: 18px; cursor: pointer; }
