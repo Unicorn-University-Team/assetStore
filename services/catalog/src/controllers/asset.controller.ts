@@ -175,12 +175,14 @@ export const AssetController = {
     }
   },
 
-  // JSON: name, description. The file itself is not replaced.
+  // JSON: name, description, tagList (optional). The file itself is not replaced.
   async update(req: Request<IdParams>, res: Response) {
     const actor = readActor(res);
-    const body = (req.body ?? {}) as { name?: unknown; description?: unknown };
+    const body = (req.body ?? {}) as { name?: unknown; description?: unknown; tagList?: unknown };
     const input = { name: readName(body.name), description: readDescription(body.description) };
-    const asset = UUID.test(req.params.id) ? await AssetModel.update(req.params.id, input, actor) : null;
+    // AM asset/update: tagList replaces the tags; without it the tags stay unchanged.
+    const tagNames = body.tagList === undefined ? null : normalizeTagList(body.tagList);
+    const asset = UUID.test(req.params.id) ? await AssetModel.update(req.params.id, input, actor, tagNames) : null;
     if (!asset) throw new HttpError(404, 'Asset not found');
 
     const [ownerNames, ratings] = await Promise.all([

@@ -602,7 +602,7 @@ Endpointy mají **catalog** (assety), **identity** (přihlášení, viz [Přihl�
 | `GET` | `/api/assets/my?pageIndex=&pageSize=` | US-1 „My assets“ (AM `asset/listMy`): jen assety přihlášeného uživatele (vlastník z tokenu), od nejnovějších, stránkování jako u seznamu; bez přihlášení **401**, žádné assety = prázdný `itemList` |
 | `GET` | `/api/assets/:id` | jeden asset |
 | `POST` | `/api/assets` | nahrání, `multipart/form-data`: `name`, `description`, `type`, `tagList` (nepovinné, viz [Tagy při publikaci](#tagy-při-publikaci-us-11)), `file`; potřebuje přihlášení |
-| `PUT` | `/api/assets/:id` | JSON `{ name, description }`, soubor se nemění; jen vlastník, jinak **403** |
+| `PUT` | `/api/assets/:id` | JSON `{ name, description, tagList? }`; `tagList` nahradí tagy (chybějící tag se vytvoří, US-1.1), bez něj zůstanou, soubor se nemění; jen vlastník, jinak **403** |
 | `DELETE` | `/api/assets/:id` | smaže záznam i soubor; jen vlastník nebo admin, jinak **403** |
 | `GET` | `/api/assets/:id/download` | stažení souboru, `downloadCount` + 1 |
 | `GET` | `/api/assets/:id/file` | soubor pro náhled (obrázek, glTF, zvuk), `inline`, Range, `downloadCount` beze změny; jiný formát **404** |
