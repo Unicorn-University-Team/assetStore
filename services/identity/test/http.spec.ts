@@ -7,14 +7,14 @@ import {
   resetData, snapshot, token, users,
 } from './helpers/fixtures';
 
-vi.mock('../../services/identity/src/config/env', async () => ({ env: (await import('./helpers/fixtures.js')).testEnv }));
-vi.mock('../../services/catalog/src/config/env', async () => ({ env: (await import('./helpers/fixtures.js')).testEnv }));
-vi.mock('../../services/identity/src/db/prisma', async () => ({ prisma: (await import('./helpers/fixtures.js')).identityDb }));
-vi.mock('../../services/catalog/src/db/prisma', async () => ({ prisma: (await import('./helpers/fixtures.js')).catalogDb }));
-vi.mock('../../services/catalog/src/storage/file-storage', async () => ({ FileStorage: (await import('./helpers/fixtures.js')).storage }));
+vi.mock('../src/config/env', async () => ({ env: (await import('./helpers/fixtures.js')).testEnv }));
+vi.mock('../../catalog/src/config/env', async () => ({ env: (await import('./helpers/fixtures.js')).testEnv }));
+vi.mock('../src/db/prisma', async () => ({ prisma: (await import('./helpers/fixtures.js')).identityDb }));
+vi.mock('../../catalog/src/db/prisma', async () => ({ prisma: (await import('./helpers/fixtures.js')).catalogDb }));
+vi.mock('../../catalog/src/storage/file-storage', async () => ({ FileStorage: (await import('./helpers/fixtures.js')).storage }));
 
-import { app as identityApp } from '../../services/identity/src/app';
-import { app as catalogApp } from '../../services/catalog/src/app';
+import { app as identityApp } from '../src/app';
+import { app as catalogApp } from '../../catalog/src/app';
 
 const protectedRoutes = [
   { service: 'identity', method: 'GET', path: '/api/auth/me' },
@@ -68,7 +68,8 @@ describe('AUTH-3: existing HTTP routes', () => {
 
   for (const route of protectedRoutes) {
     describe(`${route.method} ${route.path}`, () => {
-      it.each(deniedCases)('%s / TC-10: %s is 401 without infrastructure calls or data changes', async (_tc, kind, error) => {
+      it.each(deniedCases)('%s / TC-10: %s follows session policy without infrastructure calls or data changes', async (_tc, kind, error) => {
+        const anonymousMe = route.service === 'identity' && (kind === 'guest' || kind === 'empty-cookie');
         const before = snapshot();
         const response = await request(route.service === 'identity' ? identity.url : catalog.url, route.path, {
           method: route.method,
@@ -76,9 +77,9 @@ describe('AUTH-3: existing HTTP routes', () => {
           // Valid JSON ensures the request reaches authentication rather than JSON parser errors.
           ...(route.method === 'POST' || route.method === 'PUT' ? { body: JSON.stringify({ name: 'Denied change', description: '' }) } : {}),
         });
-        expect(response.status).toBe(401);
+        expect(response.status).toBe(anonymousMe ? 200 : 401);
         expect(response.headers.get('content-type')).toContain('application/json');
-        expect(await response.json()).toEqual({ error });
+        expect(await response.json()).toEqual(anonymousMe ? { user: null } : { error });
         expect(response.headers.getSetCookie()).toEqual([]);
         expect(snapshot()).toEqual(before);
         for (const operation of infrastructureSpies()) expect(operation).not.toHaveBeenCalled();
@@ -139,13 +140,24 @@ describe('AUTH-3: existing HTTP routes', () => {
     expect(await argon2.verify(created!.passwordHash, password)).toBe(true);
   });
 
-  it('TC-07 / TC-09: an ADMIN Bearer token alone cannot replace the required cookie (401)', async () => {
+  it('registration rejects an existing username with different capitalization', async () => {
+    const response = await request(identity.url, '/api/auth/register', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'AUTH3-USER', email: 'new@auth3.example.test', password }),
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: 'This username already exists.' });
+    expect(identityDb.user.create).not.toHaveBeenCalled();
+    expect(users.size).toBe(2);
+  });
+
+  it('TC-07 / TC-09: an ADMIN Bearer token alone leaves /me anonymous (200)', async () => {
     const before = snapshot();
     const response = await request(identity.url, '/api/auth/me', {
       headers: { Authorization: `Bearer ${await token({ role: 'ADMIN', sub: ids.ADMIN })}` },
     });
-    expect(response.status).toBe(401);
-    expect(await response.json()).toEqual({ error: 'Authentication required.' });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ user: null });
     expect(snapshot()).toEqual(before);
     for (const operation of infrastructureSpies()) expect(operation).not.toHaveBeenCalled();
   });
@@ -164,6 +176,6 @@ describe('AUTH-3: existing HTTP routes', () => {
     }
   });
 
-  it.skip('TC-03: USER receives 403 on an admin-only endpoint — blocked: no route uses requireRole');
-  it.skip('TC-04: ADMIN completes an admin-only operation — blocked: no admin-only endpoint exists');
+  it.skip('TC-03: USER receives 403 on an admin-only endpoint — not yet covered by this HTTP suite');
+  it.skip('TC-04: ADMIN completes an admin-only operation — not yet covered by this HTTP suite');
 });

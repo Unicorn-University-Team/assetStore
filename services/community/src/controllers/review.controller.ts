@@ -4,9 +4,23 @@ import { CatalogClient } from '../clients/catalog.client';
 import { IdentityClient } from '../clients/identity.client';
 import { Prisma } from '../generated/prisma/client';
 import { ReviewModel } from '../models/review.model';
+import { toReviewView } from '../views/review.view';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const COMMENT_MAX_LENGTH = 2000;
+const DEFAULT_PAGE_SIZE = 20;
+const MAX_PAGE_SIZE = 100;
+
+// Whole number from the query string. max = null means no upper limit.
+function readInteger(field: string, value: unknown, min: number, max: number | null, fallback: number): number {
+  if (value === undefined) return fallback;
+  const number = typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : NaN;
+  if (!Number.isSafeInteger(number) || number < min || (max !== null && number > max)) {
+    const range = max === null ? `>= ${min}` : `from ${min} to ${max}`;
+    throw new HttpError(400, `"${field}" must be an integer ${range}`);
+  }
+  return number;
+}
 
 // Whole number of stars from 1 to 5 (the same rule as CHECK "review_rating_check").
 function readRating(value: unknown): number {
@@ -28,6 +42,20 @@ function readComment(value: unknown): string | null {
 }
 
 export const ReviewController = {
+  // AM review/list, GET /api/assets/:assetId/reviews?pageIndex=&pageSize= (no login): newest first. Like the AM
+  // algorithm, it does not ask catalog whether the asset exists: an unknown asset simply has no reviews.
+  async list(req: Request<{ assetId: string }>, res: Response) {
+    const assetId = req.params.assetId.toLowerCase();
+    if (!UUID.test(assetId)) throw new HttpError(400, '"assetId" must be a UUID');
+    const pageIndex = readInteger('pageIndex', req.query.pageIndex, 0, null, 0);
+    const pageSize = readInteger('pageSize', req.query.pageSize, 1, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE);
+    const { items, total } = await ReviewModel.findPageByAsset({ assetId, pageIndex, pageSize });
+
+    // One identity call for the whole page; names are only for display.
+    const usernames = await IdentityClient.usernames(items.map((review) => review.authorId));
+    res.json({ itemList: items.map((review) => toReviewView(review, usernames)), pageInfo: { pageIndex, pageSize, total } });
+  },
+
   // US-4, POST /api/assets/:assetId/reviews: { rating, comment? }. Any logged-in user except the asset's owner,
   // one review per user and asset.
   async create(req: Request<{ assetId: string }>, res: Response) {

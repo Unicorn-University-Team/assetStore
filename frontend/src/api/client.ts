@@ -125,6 +125,14 @@ export function apiPost<T>(path: string, body?: unknown, signal?: AbortSignal): 
   })
 }
 
+export function apiPut<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+  return request<T>(path, {
+    method: 'PUT',
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal,
+  })
+}
+
 export function apiPostForm<T>(path: string, form: FormData, headers?: HeadersInit): Promise<T> {
   return request<T>(path, { method: 'POST', body: form, headers })
 }

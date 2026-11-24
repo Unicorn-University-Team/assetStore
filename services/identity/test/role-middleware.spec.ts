@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { describe, expect, it, vi } from 'vitest';
-import { requireAuth } from '../../packages/shared/src/auth/requireAuth';
-import { requireRole } from '../../packages/shared/src/auth/requireRole';
+import { requireAuth } from '../../../packages/shared/src/auth/requireAuth';
+import { requireRole } from '../../../packages/shared/src/auth/requireRole';
 import { ids, publicKey, token } from './helpers/fixtures';
 
 // Direct middleware invocation, not an invented application endpoint.

@@ -38,7 +38,7 @@ export const UserModel = {
   async findUsernames(ids: string[]) {
     return await prisma.user.findMany({
       where: { id: { in: ids } },
-      select: { id: true, username: true },
+      select: { id: true, username: true, status: true },
     });
   },
 

@@ -1,4 +1,4 @@
-import { API_URL, apiDelete, apiGet, apiPostForm } from './client'
+import { API_URL, apiDelete, apiGet, apiPostForm, apiPut } from './client'
 
 export const ASSET_TYPES = ['2d', '3d', 'map', 'sound', 'environment'] as const
 export type AssetType = (typeof ASSET_TYPES)[number]
@@ -58,9 +58,11 @@ export type NewAsset = { name: string; description: string; type: AssetType; fil
 // The catalog API refuses a longer name search (400).
 export const SEARCH_MAX_LENGTH = 100
 
-export async function listAssets(search = '', page = 1, signal?: AbortSignal): Promise<AssetPage> {
+// tags: only assets that carry all of them (US-9); sent as repeated tagList parameters.
+export async function listAssets(search = '', page = 1, signal?: AbortSignal, tags: string[] = []): Promise<AssetPage> {
   const pageSize = 20
   const query = new URLSearchParams({ name: search, pageIndex: String(Math.max(0, page - 1)), pageSize: String(pageSize) })
+  for (const tag of tags) query.append('tagList', tag)
   const response = await apiGet<AssetListResponse>(`/assets?${query}`, signal)
   return {
     items: response.itemList,
@@ -95,6 +97,18 @@ export function uploadAsset(asset: NewAsset): Promise<Asset> {
   for (const tag of asset.tags ?? []) form.append('tagList', tag)
   form.append('file', asset.file)
   return apiPostForm<Asset>('/assets', form)
+}
+
+export function getAsset(id: string, signal?: AbortSignal): Promise<Asset> {
+  return apiGet<Asset>(`/assets/${encodeURIComponent(id)}`, signal)
+}
+
+// US-2: name, description and tags; the type and the file stay. The tags replace the old ones; a new tag the user
+// confirmed is created by the catalogue (US-1.1).
+export type AssetChanges = { name: string; description: string; tagList: string[] }
+
+export function updateAsset(id: string, changes: AssetChanges): Promise<Asset> {
+  return apiPut<Asset>(`/assets/${encodeURIComponent(id)}`, changes)
 }
 
 export function deleteAsset(id: string): Promise<void> {

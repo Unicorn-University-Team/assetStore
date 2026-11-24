@@ -354,7 +354,7 @@ při čtení doptají identity přes `/internal` (viz [Komunikace mezi službami
 
 | Metoda | Cesta | Kdo | Co dělá |
 |---|---|---|---|
-| `POST` | `/api/assets/:id/reports` | přihlášený | US-5: `{ reason, comment? }` → **201** report |
+| `POST` | `/api/assets/:id/reports` | přihlášený | US-5: `{ reason, comment? }` → **201** report; zablokovaný uživatel (`SUSPENDED`) → **403** |
 | `GET` | `/api/reports?status=&pageIndex=&pageSize=` | admin | seznam od nejnovějších; `status` `open` (výchozí), `resolved`, `rejected` nebo `all`; stránky jako u assetů: `{ itemList, pageInfo }` |
 | `GET` | `/api/reports/:id` | admin | jeden report |
 | `POST` | `/api/reports/:id/reject` | admin | US-7: zamítnutí, `open` → `rejected`, zapíše `reportRejected` do audit logu |
@@ -363,7 +363,8 @@ při čtení doptají identity přes `/internal` (viz [Komunikace mezi službami
   nepovinný, nejvýš 500 znaků. Stejný seznam je ve frontendu (`frontend/src/api/reports.ts`) a jako CHECK v databázi.
 - **Stavy:** `open` → `resolved` (US-6, přijetí: zatím chybí) nebo `rejected` (US-7). Rozhodnutý report má
   `decidedById` a `decidedAt`.
-- **Pravidla:** vlastní asset nahlásit nejde (**403**), stejný uživatel má na jeden asset nejvýš jeden otevřený
+- **Pravidla:** vlastní asset nahlásit nejde (**403**), zablokovaný uživatel nahlásit nejde (**403**; stav se ověří
+  v identity, když neodpoví → **503**), stejný uživatel má na jeden asset nejvýš jeden otevřený
   report (**409**; v databázi částečný unikátní index `report_one_open_per_author_asset`, platí i pro dva požadavky
   najednou), neexistující asset → **404**. Rozhodnutý report znovu zamítnout nejde (**409**). Seznam, detail
   a zamítnutí bez role admin → **403**, bez přihlášení **401**. Bez `JWT_PUBLIC_KEY` odpoví community **503**.
@@ -379,6 +380,7 @@ jako u reportů se ukládají jen id assetu a autora, vlastníka assetu communit
 
 | Metoda | Cesta | Kdo | Co dělá |
 |---|---|---|---|
+| `GET` | `/api/assets/:id/reviews` | kdokoli | recenze assetu od nejnovějších: `?pageIndex=&pageSize=` → `{ itemList, pageInfo }` |
 | `POST` | `/api/assets/:id/reviews` | přihlášený | US-4: `{ rating, comment? }` → **201** recenze |
 
 - `rating` je celé číslo 1–5 (i CHECK v databázi), `comment` je nepovinný, nejvýš 2000 znaků; prázdný = `null`.
@@ -387,6 +389,9 @@ jako u reportů se ukládají jen id assetu a autora, vlastníka assetu communit
 - **Odpověď:** `id`, `assetId`, `authorId`, `authorName`, `rating`, `comment`, `createdAt` a nový stav assetu
   `averageRating` (zaokrouhlený na jedno desetinné místo) a `reviewCount`. `authorName` je `null`, když identity
   neodpoví.
+- **Seznam:** stránky od 0, `pageSize` 1–100 (výchozí 20), jinak **400**; neplatné id assetu → **400**. Existenci
+  assetu se catalogu neptá: neznámý asset prostě nemá recenze (prázdný `itemList`). Položka má stejná pole jako
+  odpověď na `POST`, bez `averageRating` a `reviewCount`.
 
 ## Kolekce
 
@@ -489,8 +494,9 @@ community ──GET /internal/assets/:id/exists──▶ catalog ──▶ datab
 | Služba | Cesta | Odpověď | Kdo volá |
 |---|---|---|---|
 | catalog | `GET /internal/assets/:id/exists` | `{ "exists": boolean }` | community |
-| identity | `GET /internal/users?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "id", "username" }] }`, neznámá id chybí | catalog (`ownerName`), community (jména v reportech) |
+| identity | `GET /internal/users?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "id", "username", "status" }] }` (`ACTIVE` / `SUSPENDED`), neznámá id chybí | catalog (`ownerName`), community (jména v reportech, zablokovaný autor nesmí nahlásit asset) |
 | catalog | `GET /internal/assets?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "id", "name", "ownerId" }] }`, smazané assety chybí | community (reporty) |
+| community | `GET /internal/reviews/summaries?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "assetId", "averageRating", "reviewCount" }] }`, assety bez recenzí chybí | catalog (hodnocení assetů) |
 
 ### Nová interní cesta
 
@@ -596,7 +602,7 @@ Endpointy mají **catalog** (assety), **identity** (přihlášení, viz [Přihl�
 | `GET` | `/api/assets/my?pageIndex=&pageSize=` | US-1 „My assets“ (AM `asset/listMy`): jen assety přihlášeného uživatele (vlastník z tokenu), od nejnovějších, stránkování jako u seznamu; bez přihlášení **401**, žádné assety = prázdný `itemList` |
 | `GET` | `/api/assets/:id` | jeden asset |
 | `POST` | `/api/assets` | nahrání, `multipart/form-data`: `name`, `description`, `type`, `tagList` (nepovinné, viz [Tagy při publikaci](#tagy-při-publikaci-us-11)), `file`; potřebuje přihlášení |
-| `PUT` | `/api/assets/:id` | JSON `{ name, description }`, soubor se nemění; jen vlastník, jinak **403** |
+| `PUT` | `/api/assets/:id` | JSON `{ name, description, tagList? }`; `tagList` nahradí tagy (chybějící tag se vytvoří, US-1.1), bez něj zůstanou, soubor se nemění; jen vlastník, jinak **403** |
 | `DELETE` | `/api/assets/:id` | smaže záznam i soubor; jen vlastník nebo admin, jinak **403** |
 | `GET` | `/api/assets/:id/download` | stažení souboru, `downloadCount` + 1 |
 | `GET` | `/api/assets/:id/file` | soubor pro náhled (obrázek, glTF, zvuk), `inline`, Range, `downloadCount` beze změny; jiný formát **404** |
@@ -606,7 +612,10 @@ Asset v odpovědi (`services/catalog/src/views/asset.view.ts`). `ownerId` je id 
 assetů `null`), `ownerName` jeho uživatelské jméno: catalog se na jména ptá identity (`GET /internal/users`,
 viz [Komunikace mezi službami](#komunikace-mezi-službami)). Když identity neodpoví, je `ownerName` `null` a katalog
 funguje dál. `previewUrl` je adresa náhledu u obrázků do 5 MB (jinak `null`, viz [Náhled](#náhled-get-apiassetsidfile)).
-`tagList` jsou názvy tagů podle abecedy. `averageRating` je zatím `null` a `reviewCount` 0, dokud nejsou recenze:
+`tagList` jsou názvy tagů podle abecedy. `averageRating` (na jedno desetinné místo) a `reviewCount` v `GET /api/assets`,
+`GET /api/assets/my`, `GET /api/assets/:id` a `PUT /api/assets/:id` počítá community (jedno volání
+`GET /internal/reviews/summaries` na odpověď). Bez recenzí, nebo když community neodpoví, je `averageRating` `null`
+a `reviewCount` 0 a katalog funguje dál. Nový asset z `POST /api/assets` recenze ještě nemá, proto vrací `null` a 0:
 
 ```json
 {

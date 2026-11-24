@@ -94,6 +94,8 @@ services:
       INTERNAL_KEY: ${INTERNAL_KEY:-}
       # Names of asset owners (ownerName) come from identity.
       IDENTITY_URL: http://identity:3000
+      # Ratings of assets (averageRating, reviewCount) come from community.
+      COMMUNITY_URL: http://community:3000
       # Public key for checking access tokens (README, Přihlášení). Missing = writing answers 503.
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:-}
 

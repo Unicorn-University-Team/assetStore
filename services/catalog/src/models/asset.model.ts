@@ -39,6 +39,11 @@ function canDelete(asset: Asset, actor: Actor): boolean {
   return canEdit(asset, actor) || actor.role === 'ADMIN';
 }
 
+// Tag names of an asset in alphabetical order, for comparing and for the audit log.
+function tagNamesOf(asset: AssetWithTags): string[] {
+  return asset.tags.map((link) => link.tag.name).sort();
+}
+
 export const AssetModel = {
   // Newest first (AM asset/list); id breaks ties so that paging never repeats or skips an asset.
   // ownerId = null lists everybody's assets. tagNames: only assets that have all of these tags (AND); empty = no filter,
@@ -111,9 +116,10 @@ export const AssetModel = {
   },
 
   // An update that changes nothing is not logged.
-  update(id: string, input: AssetUpdate, actor: Actor): Promise<AssetWithTags | null> {
+  // tagNames null = the tags stay as they are (a request without tagList).
+  update(id: string, input: AssetUpdate, actor: Actor, tagNames: string[] | null = null): Promise<AssetWithTags | null> {
     return prisma.$transaction(async (tx) => {
-      const before = await tx.asset.findUnique({ where: { id } });
+      const before = await tx.asset.findUnique({ where: { id }, include: withTags });
       if (!before) return null;
       if (!canEdit(before, actor)) throw new HttpError(403, 'Only the owner can edit this asset');
 
@@ -121,8 +127,14 @@ export const AssetModel = {
       const { count } = await tx.asset.updateMany({ where: { id }, data: input });
       if (count === 0) return null;
 
+      // US-2: the tags are replaced like at publishing; a missing tag is created (US-1.1), names in lower case.
+      if (tagNames !== null) await AssetModel.setTags(tx, id, tagNames);
+
       const after = await tx.asset.findUniqueOrThrow({ where: { id }, include: withTags });
       const changes = diffFields(before, after, ['name', 'description']);
+      const oldTags = tagNamesOf(before);
+      const newTags = tagNamesOf(after);
+      if (oldTags.join(',') !== newTags.join(',')) changes.tags = { old: oldTags, new: newTags };
       if (Object.keys(changes).length > 0) {
         await AuditLogModel.create(tx, {
           action: 'assetUpdated',

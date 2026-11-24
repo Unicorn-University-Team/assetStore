@@ -1,3 +1,4 @@
+import type { AssetRating } from '../clients/community.client';
 import type { Asset, AssetWithTags } from '../models/asset.model';
 import { cardPreviewUrl } from '../utils/preview';
 
@@ -21,8 +22,15 @@ export interface AssetView {
 }
 
 // ownerNames: username by user id from identity (IdentityClient.usernames). Missing = ownerName null.
+// ratings: rating by asset id from community (CommunityClient.ratings). Missing (no reviews, or community is down)
+// = averageRating null and reviewCount 0.
 // tagList: names in alphabetical order; an asset read without its tags has [].
-export function toAssetView(asset: Asset | AssetWithTags, ownerNames: ReadonlyMap<string, string> = new Map()): AssetView {
+export function toAssetView(
+  asset: Asset | AssetWithTags,
+  ownerNames: ReadonlyMap<string, string> = new Map(),
+  ratings: ReadonlyMap<string, AssetRating> = new Map(),
+): AssetView {
+  const rating = ratings.get(asset.id);
   return {
     id: asset.id,
     ownerId: asset.ownerId,
@@ -36,8 +44,8 @@ export function toAssetView(asset: Asset | AssetWithTags, ownerNames: ReadonlyMa
     // Small images are their own preview (GET /api/assets/:id/file); other types have none yet.
     previewUrl: cardPreviewUrl(asset),
     downloadCount: asset.downloadCount,
-    averageRating: null,
-    reviewCount: 0,
+    averageRating: rating?.averageRating ?? null,
+    reviewCount: rating?.reviewCount ?? 0,
     createdAt: asset.createdAt.toISOString(),
     updatedAt: asset.updatedAt.toISOString(),
   };

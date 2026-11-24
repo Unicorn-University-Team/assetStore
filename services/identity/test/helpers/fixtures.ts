@@ -2,8 +2,8 @@ import { generateKeyPairSync } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { SignJWT, importPKCS8, importSPKI } from 'jose';
 import { vi } from 'vitest';
-import type { Asset } from '../../../services/catalog/src/generated/prisma/client';
-import type { User } from '../../../services/identity/src/generated/prisma/client';
+import type { Asset } from '../../../catalog/src/generated/prisma/client';
+import type { User } from '../../src/generated/prisma/client';
 
 export type Role = 'USER' | 'ADMIN';
 const keys = generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -43,7 +43,7 @@ export function resetData(passwordHash: string): void {
     });
   }
   assets.set(ids.asset, {
-    id: ids.asset, name: 'AUTH-3 public asset', description: '', type: '3d',
+    id: ids.asset, ownerId: null, name: 'AUTH-3 public asset', description: '', type: '3d',
     fileKey: 'auth3/test-only', fileName: 'auth3.obj', fileSize: fileBytes.length,
     contentType: 'application/octet-stream', downloadCount: 0,
     createdAt: timestamp, updatedAt: timestamp,
@@ -96,6 +96,10 @@ export const catalogDb = {
 };
 export const identityDb = {
   user: {
+    findFirst: vi.fn(async ({ where }: { where: { username: { equals: string; mode: 'insensitive' } } }) => {
+      const user = [...users.values()].find((candidate) => candidate.username.toLowerCase() === where.username.equals.toLowerCase());
+      return user ? { ...user } : null;
+    }),
     findUnique: vi.fn(async ({ where, select }: {
       where: { id?: string; email?: string; username?: string };
       select?: Partial<Record<keyof User, boolean>>;
