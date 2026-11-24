@@ -83,7 +83,7 @@ export const AssetModel = {
 
   // Name and owner only, for other services (GET /internal/assets).
   findSummaries(ids: string[]) {
-    return prisma.asset.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, ownerId: true } });
+    return prisma.asset.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, ownerId: true, type: true } });
   },
 
   findById(id: string): Promise<AssetWithTags | null> {

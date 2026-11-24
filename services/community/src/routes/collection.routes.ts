@@ -9,3 +9,4 @@ export const collectionRoutes = Router();
 collectionRoutes.use(requireAuth(loadPublicKey));
 collectionRoutes.post('/', CollectionController.create);
 collectionRoutes.get('/', CollectionController.listMy);
+collectionRoutes.get('/:id', CollectionController.get)

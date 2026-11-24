@@ -12,4 +12,11 @@ export const CollectionModel = {
   listByOwner(ownerId: string) {
     return prisma.collection.findMany({ where: { ownerId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
   },
+
+  get (data : {collectionId: string, ownerId: string}){
+    return prisma.collection.findUnique({
+      where: {id: data.collectionId , ownerId: data.ownerId}, 
+      include: {assets : true}
+    })
+  }
 };
