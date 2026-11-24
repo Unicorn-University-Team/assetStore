@@ -14,6 +14,10 @@ export const env = {
   maxStorageGb: Number(process.env.MAX_STORAGE_GB) || 5,
   // Shared secret that other services send in X-Internal-Key on /internal routes. Empty = not checked.
   internalKey: process.env.INTERNAL_KEY ?? '',
+  // identity, asked for the names of asset owners. In Docker: http://identity:3000 (docker-compose.yml).
+  identityUrl: process.env.IDENTITY_URL ?? 'http://localhost:3001',
+  // community, asked for the ratings of assets. In Docker: http://community:3000 (docker-compose.yml).
+  communityUrl: process.env.COMMUNITY_URL ?? 'http://localhost:3003',
   // Public key from identity for checking access tokens (README, Přihlášení). Empty = writing answers 503.
   jwtPublicKey: process.env.JWT_PUBLIC_KEY ?? '',
 };

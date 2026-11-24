@@ -3,6 +3,7 @@ type PaginationProps = {
   pageSize: number
   total: number
   onChange: (page: number) => void
+  label?: string
 }
 
 // First, last and the pages around the current one; a gap stands for the pages left out.
@@ -14,12 +15,12 @@ function visiblePages(page: number, totalPages: number): (number | 'gap')[] {
   return pages.flatMap((item, index) => (index > 0 && item - pages[index - 1] > 1 ? ['gap' as const, item] : [item]))
 }
 
-export default function Pagination({ page, pageSize, total, onChange }: PaginationProps) {
+export default function Pagination({ page, pageSize, total, onChange, label = 'Catalogue pages' }: PaginationProps) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   if (totalPages <= 1) return null
 
   return (
-    <nav className="pagination" aria-label="Catalogue pages">
+    <nav className="pagination" aria-label={label}>
       <button type="button" disabled={page <= 1} onClick={() => onChange(page - 1)} aria-label="Previous page">‹</button>
       {visiblePages(page, totalPages).map((item, index) => item === 'gap'
         ? <span className="page-gap" key={`gap-${index}`}>…</span>

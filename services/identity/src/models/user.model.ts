@@ -7,9 +7,10 @@ export const UserModel = {
     });
   },
 
+  // Ignores case: "Tester" and "tester" are the same name (unique index on lower(username) in the migration).
   async findByUsername(username: string) {
-    return await prisma.user.findUnique({
-      where: { username: username },
+    return await prisma.user.findFirst({
+      where: { username: { equals: username, mode: "insensitive" } },
     });
   },
 
@@ -30,6 +31,14 @@ export const UserModel = {
         email: data.email,
         passwordHash: data.passwordHash,
       },
+    });
+  },
+
+  // Usernames for other services (GET /internal/users).
+  async findUsernames(ids: string[]) {
+    return await prisma.user.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, username: true, status: true },
     });
   },
 

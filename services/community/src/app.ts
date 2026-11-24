@@ -1,12 +1,18 @@
 import { errorHandler, notFound, requireInternalKey } from '@assetstore/shared';
-import express, { type Request, type Response } from 'express';
-import { CatalogClient } from './clients/catalog.client';
+import cookieParser from 'cookie-parser';
+import express from 'express';
 import { env } from './config/env';
 import { prisma } from './db/prisma';
+import { collectionRoutes } from './routes/collection.routes';
+import { internalRoutes } from './routes/internal.routes';
+import { assetReportRoutes, reportRoutes } from './routes/report.routes';
+import { assetReviewRoutes } from './routes/review.routes';
 
 export const app = express();
 
 app.use(express.json());
+// Reads the access_token cookie for requireAuth; must come before the routes.
+app.use(cookieParser());
 
 // Docker healthcheck and Caddy (/api/health/community) use this; it is not part of the public API.
 app.get('/health', async (_req, res) => {
@@ -23,12 +29,13 @@ app.get('/health', async (_req, res) => {
 //   /api/assets/:id/reviews, /api/reviews/...    reviews
 //   /api/collections/...                         collections
 //   /api/assets/:id/reports, /api/reports/...    reports
+app.use('/api/assets/:assetId/reports', assetReportRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/api/assets/:assetId/reviews', assetReviewRoutes);
+app.use('/api/collections', collectionRoutes);
 
-// Temporary check of community -> catalog communication; remove once reviews call CatalogClient themselves.
-async function checkAsset(req: Request<{ id: string }>, res: Response) {
-  res.json({ assetId: req.params.id, exists: await CatalogClient.assetExists(req.params.id) });
-}
-app.get('/internal/check-asset/:id', requireInternalKey(env.internalKey), checkAsset);
+// For other services only (X-Internal-Key); Caddy does not route /internal from outside.
+app.use('/internal', requireInternalKey(env.internalKey), internalRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

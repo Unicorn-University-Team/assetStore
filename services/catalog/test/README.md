@@ -1,9 +1,10 @@
 # US-9: Asset download
 
-Run from the repository root in PyCharm's terminal, using Node.js 24 and npm:
+Run from the repository root using Node.js 24 and npm:
 
 ```bash
 npm ci
+npm test
 npm run test:us9 -w @assetstore/catalog
 npm run typecheck:tests -w @assetstore/catalog
 npm run typecheck
@@ -22,10 +23,16 @@ To run a single scenario independently:
 npm run test:us9 -w @assetstore/catalog -- -t TC-04
 ```
 
-`npm test -w @assetstore/catalog` runs all catalog tests. Vitest is the only new
-test dependency: the repository had no automated TypeScript test framework, and
-Vitest supplies TypeScript support and module mocks without production changes.
-Node's built-in `fetch` sends requests; no HTTP test client dependency is needed.
+`npm test` runs workspace test scripts. `npm test -w @assetstore/catalog` runs
+both Node's tag unit tests (`test/*.test.ts`) and the Vitest suites for US-2 and
+US-9 (`test/*.spec.ts`). These distinct suffixes keep each runner from loading
+the other runner's files. CI invokes the catalog workspace's `npm test`.
+
+Vitest is one root development dependency, shared through `vitest.config.mts`
+with US-2 and any root test suites such as AUTH-3. There is no separate catalog
+Vitest configuration. Node's built-in `fetch` sends requests; no HTTP test client
+dependency is needed. The asset fixture includes `ownerId: null`, representing
+an existing legacy asset without an owner.
 
 | Case | Assertions |
 | --- | --- |

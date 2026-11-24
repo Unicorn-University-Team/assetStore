@@ -66,6 +66,7 @@ export const identityPrisma = {
 export function seedAsset(): Asset {
   const asset: Asset = {
     id: randomUUID(),
+    ownerId: null,
     name: 'US-9 triangle',
     description: 'An isolated downloadable test asset',
     type: '3d',

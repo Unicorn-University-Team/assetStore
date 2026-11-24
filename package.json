@@ -12,6 +12,10 @@
   "scripts": {
     "postinstall": "npm run build -w @assetstore/shared && npm run db:generate --workspaces --if-present",
     "build": "npm run build --workspaces",
-    "typecheck": "npm run typecheck --workspaces"
+    "typecheck": "npm run typecheck --workspaces",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "devDependencies": {
+    "vitest": "^5.1.0"
   }
 }

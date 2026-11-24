@@ -32,8 +32,9 @@ if [ -n "$(unhealthy)" ]; then
 fi
 
 # Old images and build cache would slowly fill the server's disk.
+# The build cache keeps only the 2 GB used most recently, so the next build stays fast.
 docker image prune -f >/dev/null
-docker builder prune -f --filter until=168h >/dev/null
+docker builder prune -f --reserved-space 2gb >/dev/null
 
 # Disk more than 70% full: drop the whole build cache and all unused images too.
 # Nothing is lost, the next build only takes longer.
