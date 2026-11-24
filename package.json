@@ -13,6 +13,8 @@
     "postinstall": "npm run build -w @assetstore/shared && npm run db:generate --workspaces --if-present",
     "build": "npm run build --workspaces",
     "typecheck": "npm run typecheck --workspaces",
+    "test:auth3": "vitest run services/identity/test",
+    "typecheck:auth3": "npm run typecheck:tests -w @assetstore/identity",
     "test": "npm run test --workspaces --if-present"
   },
   "devDependencies": {
