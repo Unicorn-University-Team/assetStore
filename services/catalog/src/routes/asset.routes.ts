@@ -7,7 +7,10 @@ export const assetRoutes = Router();
 
 assetRoutes.get('/', AssetController.list);
 assetRoutes.post('/', requireAuth(loadPublicKey), AssetController.create);
+// Before /:id, so that "my" is not read as an asset id.
+assetRoutes.get('/my', requireAuth(loadPublicKey), AssetController.listMy);
 assetRoutes.get('/:id', AssetController.getById);
 assetRoutes.get('/:id/download', AssetController.download);
+assetRoutes.get('/:id/file', AssetController.preview);
 assetRoutes.put('/:id', requireAuth(loadPublicKey), AssetController.update);
 assetRoutes.delete('/:id', requireAuth(loadPublicKey), AssetController.remove);

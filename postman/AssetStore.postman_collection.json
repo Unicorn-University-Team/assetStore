@@ -23,6 +23,14 @@
       "key": "assetId",
       "value": "",
       "description": "Filled by Assets / List and Assets / Create"
+    },
+    {
+      "key": "reportId",
+      "value": ""
+    },
+    {
+      "key": "collectionId",
+      "value": ""
     }
   ],
   "item": [
@@ -239,7 +247,7 @@
                 "me"
               ]
             },
-            "description": "The signed-in user. 401 without a valid access token: call Refresh or Login."
+            "description": "The signed-in user. No session cookie at all: 200 { user: null }. Invalid or expired access token: 401, call Refresh or Login."
           }
         },
         {
@@ -341,6 +349,24 @@
                   "description": "Part of the name, any letter case, at most 100 characters"
                 },
                 {
+                  "key": "ownerId",
+                  "value": "",
+                  "description": "Only this user's assets (id from Auth → Me)",
+                  "disabled": true
+                },
+                {
+                  "key": "tagList",
+                  "value": "medieval",
+                  "description": "Tag name; repeat the parameter for more tags. Only assets with all of them (AND), at most 10",
+                  "disabled": true
+                },
+                {
+                  "key": "tagList",
+                  "value": "low-poly",
+                  "description": "Second tag (AND)",
+                  "disabled": true
+                },
+                {
                   "key": "pageIndex",
                   "value": "0",
                   "description": "Page number from 0"
@@ -352,7 +378,50 @@
                 }
               ]
             },
-            "description": "A page of the catalogue (20 per page), newest first."
+            "description": "A page of the catalogue (20 per page), newest first. Turn on tagList to filter by tags (all of them)."
+          }
+        },
+        {
+          "name": "List mine (My assets)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('only my assets', () => pm.response.json().itemList.forEach((a) => pm.expect(a.ownerId).to.be.a('string')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "US-1 My assets: only the logged-in user's assets, newest first. Needs Login, otherwise 401.",
+            "url": {
+              "raw": "{{baseUrl}}/api/assets/my?pageIndex=0&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "assets",
+                "my"
+              ],
+              "query": [
+                {
+                  "key": "pageIndex",
+                  "value": "0",
+                  "description": "Page from 0"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "description": "1 to 100, default 20"
+                }
+              ]
+            }
           }
         },
         {
@@ -400,6 +469,18 @@
                   "key": "type",
                   "value": "3d",
                   "type": "text"
+                },
+                {
+                  "key": "tagList",
+                  "value": "medieval",
+                  "type": "text",
+                  "description": "Optional; one field per tag (max 10), lower-cased; a missing tag is created. Wrong name → 400"
+                },
+                {
+                  "key": "tagList",
+                  "value": "Low-Poly",
+                  "type": "text",
+                  "description": "Second tag (saved as low-poly)"
                 },
                 {
                   "key": "file",
@@ -585,6 +666,279 @@
             },
             "description": "At most 10 tags starting with the prefix, sorted by name."
           }
+        }
+      ]
+    },
+    {
+      "name": "Reviews",
+      "item": [
+        {
+          "name": "Create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/assets/{{assetId}}/reviews",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "assets",
+                "{{assetId}}",
+                "reviews"
+              ]
+            },
+            "description": "Review the asset in assetId (Assets → List sets it). Needs Login. rating: whole number 1 to 5; comment optional, at most 2000 characters. Own asset 403, second review of the same asset 409. The answer has the new averageRating and reviewCount of the asset.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rating\": 5,\n  \"comment\": \"\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Collections",
+      "item": [
+        {
+          "name": "Create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/collections",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "collections"
+              ]
+            },
+            "description": "New collection of the logged-in user. Needs Login. name 1 to 100 characters, description optional, at most 2000.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Medieval pack\",\n  \"description\": \"\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) pm.collectionVariables.set('collectionId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List mine",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/collections",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "collections"
+              ]
+            },
+            "description": "The logged-in user's collections, newest first. Needs Login."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "Create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/assets/{{assetId}}/reports",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "assets",
+                "{{assetId}}",
+                "reports"
+              ]
+            },
+            "description": "Report the asset in assetId (Assets → List sets it). Needs Login. reason: inappropriateContent | copyright | spam | brokenFile | other; comment at most 500 characters. Own asset 403, second open report 409.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"spam\",\n  \"comment\": \"\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) pm.collectionVariables.set('reportId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List (admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/reports?status=open&pageIndex=0&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reports"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "open",
+                  "description": "open (default), resolved, rejected or all"
+                },
+                {
+                  "key": "pageIndex",
+                  "value": "0",
+                  "description": "Page number from 0"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "description": "1 to 100"
+                }
+              ]
+            },
+            "description": "Reports newest first. Needs Login as an admin, otherwise 403."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const items = pm.response.json().itemList || [];",
+                  "if (items.length) pm.collectionVariables.set('reportId', items[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get (admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/reports/{{reportId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reports",
+                "{{reportId}}"
+              ]
+            },
+            "description": "One report with asset, owner and author names."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject (admin)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/reports/{{reportId}}/reject",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reports",
+                "{{reportId}}",
+                "reject"
+              ]
+            },
+            "description": "US-7: open → rejected. A report that is not open any more answers 409."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
         }
       ]
     }

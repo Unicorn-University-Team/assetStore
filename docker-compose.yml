@@ -73,6 +73,7 @@ services:
       # Keys for access tokens (README, Přihlášení). Missing = login and refresh answer 503.
       JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:-}
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:-}
+      INTERNAL_KEY: ${INTERNAL_KEY:-}
 
   catalog:
     <<: *service
@@ -91,6 +92,8 @@ services:
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-100}
       MAX_STORAGE_GB: ${MAX_STORAGE_GB:-5}
       INTERNAL_KEY: ${INTERNAL_KEY:-}
+      # Names of asset owners (ownerName) come from identity.
+      IDENTITY_URL: http://identity:3000
       # Public key for checking access tokens (README, Přihlášení). Missing = writing answers 503.
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:-}
 
@@ -107,7 +110,10 @@ services:
       DATABASE_URL: postgres://assetstore:${POSTGRES_PASSWORD}@db:5432/community
       # Other services by their name in the Docker network (not localhost: that is the container itself).
       CATALOG_URL: http://catalog:3000
+      IDENTITY_URL: http://identity:3000
       INTERNAL_KEY: ${INTERNAL_KEY:-}
+      # Public key for checking access tokens (README, Přihlášení). Missing = reports answer 503.
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:-}
 
   # Caddy with the built frontend inside (frontend/Dockerfile): serves the site, routes /api to the services.
   caddy:

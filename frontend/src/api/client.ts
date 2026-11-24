@@ -12,6 +12,15 @@ export class ApiError extends Error {
   }
 }
 
+export type LoadFailure = { message: string; status: number }
+
+// A failed request, ready for an error or not-found state. status 0 means it never reached the server.
+export function describeFailure(cause: unknown, fallback: string): LoadFailure {
+  if (cause instanceof ApiError) return { message: cause.message || fallback, status: cause.status }
+  if (cause instanceof Error && cause.message) return { message: cause.message, status: 0 }
+  return { message: fallback, status: 0 }
+}
+
 async function responseError(response: Response): Promise<ApiError> {
   const rawBody = await response.text().catch(() => '')
   const contentType = response.headers.get('content-type') ?? ''
