@@ -46,14 +46,6 @@ function readAssetOwnerId(value: unknown): string | null {
   return value.toLowerCase();
 }
 
-// AM report/list 1.2: a key the command does not know is an error, not silently ignored.
-const LIST_KEYS = ['status', 'assetOwnerId', 'pageIndex', 'pageSize'];
-
-function rejectUnknownKeys(query: Request['query'], allowed: string[]) {
-  const unknown = Object.keys(query).filter((key) => !allowed.includes(key));
-  if (unknown.length > 0) throw new HttpError(400, `Unsupported parameters: ${unknown.join(', ')}`);
-}
-
 // Whole number from the query string. max = null means no upper limit.
 function readInteger(field: string, value: unknown, min: number, max: number | null, fallback: number): number {
   if (value === undefined) return fallback;
@@ -111,7 +103,6 @@ export const ReportController = {
   // GET /api/reports?status=&assetOwnerId=&pageIndex=&pageSize= (admin): newest first, open ones by default;
   // with assetOwnerId only the reports on that user's assets.
   async list(req: Request, res: Response) {
-    rejectUnknownKeys(req.query, LIST_KEYS);
     const status = readStatus(req.query.status);
     const assetOwnerId = readAssetOwnerId(req.query.assetOwnerId);
     const pageIndex = readInteger('pageIndex', req.query.pageIndex, 0, null, 0);

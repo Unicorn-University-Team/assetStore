@@ -355,7 +355,7 @@ při čtení doptají identity přes `/internal` (viz [Komunikace mezi službami
 | Metoda | Cesta | Kdo | Co dělá |
 |---|---|---|---|
 | `POST` | `/api/assets/:id/reports` | přihlášený | US-5: `{ reason, comment? }` → **201** report; zablokovaný uživatel (`SUSPENDED`) → **403** |
-| `GET` | `/api/reports?status=&assetOwnerId=&pageIndex=&pageSize=` | admin | seznam od nejnovějších; `status` `open` (výchozí), `resolved`, `rejected` nebo `all`; `assetOwnerId` (nepovinné, UUID) = jen reporty na assety tohoto vlastníka; jiný parametr → **400**; stránky jako u assetů: `{ itemList, pageInfo }` |
+| `GET` | `/api/reports?status=&assetOwnerId=&pageIndex=&pageSize=` | admin | seznam od nejnovějších; `status` `open` (výchozí), `resolved`, `rejected` nebo `all`; `assetOwnerId` (nepovinné, UUID) = jen reporty na assety tohoto vlastníka; stránky jako u assetů: `{ itemList, pageInfo }` |
 | `GET` | `/api/reports/:id` | admin | jeden report |
 | `POST` | `/api/reports/:id/reject` | admin | US-7: zamítnutí, `open` → `rejected`, zapíše `reportRejected` do audit logu |
 
