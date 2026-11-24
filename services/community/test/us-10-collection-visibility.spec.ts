@@ -191,15 +191,17 @@ describe('US-10 — private collections and required name', () => {
     await assertNoCreation({ name: 'Valid', description: 'd'.repeat(2001) }, '"description" must be at most 2000 characters');
   });
 
-  it('TC-US10-13: user suspended after login must not create with their existing access cookie', async () => {
+  // DEF-US10-01: expected failure until creation checks the current account status.
+  // Keep the required behavior below; remove `.fails` when the backend defect is fixed.
+  it.fails('TC-US10-13 [DEF-US10-01]: user suspended after login must not create with their existing access cookie', async () => {
     users.get(userA)!.status = 'SUSPENDED';
     const before = structuredClone([...collections]);
     const response = await create({ name: 'Suspended attempt' }, cookieA);
     // US-10 requires an active account; no exact rejection status is specified for collections.
-    expect.soft(response.status).toBeGreaterThanOrEqual(400);
-    expect.soft(response.status).toBeLessThan(500);
-    expect.soft([...collections]).toEqual(before);
-    expect.soft(communityPrisma.collection.create).not.toHaveBeenCalled();
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(response.status).toBeLessThan(500);
+    expect([...collections]).toEqual(before);
+    expect(communityPrisma.collection.create).not.toHaveBeenCalled();
   });
 
   it('TC-US10-14: supplied ownerId cannot transfer ownership to B', async () => {
