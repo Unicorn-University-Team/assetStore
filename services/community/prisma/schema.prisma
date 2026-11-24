@@ -37,6 +37,8 @@ model Report {
   // One open report per author and asset: partial unique index "report_one_open_per_author_asset" (only in the
   // report_per_am migration, Prisma cannot express it).
   @@index([status, createdAt])
+  // Admin list filtered by asset owner (report/list assetOwnerId), newest first.
+  @@index([assetOwnerId, createdAt])
   @@index([assetId])
   @@map("report")
 }

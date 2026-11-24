@@ -35,9 +35,17 @@ export const ReportModel = {
     }
   },
 
-  // Newest first; id breaks ties so that paging never repeats or skips a report. status null = all.
-  async findPage(options: { status: ReportStatus | null; pageIndex: number; pageSize: number }) {
-    const where = options.status ? { status: options.status } : {};
+  // Newest first; id breaks ties so that paging never repeats or skips a report. status null = all statuses;
+  // assetOwnerId null = reports on anyone's assets (no condition, not IS NULL).
+  async findPage(options: {
+    status: ReportStatus | null;
+    assetOwnerId: string | null;
+    pageIndex: number;
+    pageSize: number;
+  }) {
+    const where: Prisma.ReportWhereInput = {};
+    if (options.status) where.status = options.status;
+    if (options.assetOwnerId) where.assetOwnerId = options.assetOwnerId;
     const [items, total] = await prisma.$transaction([
       prisma.report.findMany({
         where,
