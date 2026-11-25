@@ -143,10 +143,15 @@ export const AssetController = {
 
   // multipart/form-data: name, description, type, tagList (optional, one field per tag or a JSON array), file
   async create(req: Request, res: Response) {
+    const actor = readActor(res);
+    // AM asset/create step 1 (userSuspended): the access token lives up to 15 minutes after a suspension, so the
+    // account status is asked from identity before anything is uploaded.
+    if ((await IdentityClient.status(actor.id)) === 'SUSPENDED') {
+      throw new HttpError(403, 'A suspended account cannot publish assets');
+    }
+
     // Refuse before reading the body when the storage is already full.
     if ((await AssetModel.totalFileSize()) >= STORAGE_LIMIT_BYTES) throw storageFull();
-
-    const actor = readActor(res);
 
     const { fields, fieldLists, file } = await receiveUpload(req, {
       fileField: 'file',
@@ -175,11 +180,15 @@ export const AssetController = {
     }
   },
 
-  // JSON: name, description, tagList (optional). The file itself is not replaced.
+  // JSON: name, description (optional), tagList (optional). The file itself is not replaced.
   async update(req: Request<IdParams>, res: Response) {
     const actor = readActor(res);
     const body = (req.body ?? {}) as { name?: unknown; description?: unknown; tagList?: unknown };
-    const input = { name: readName(body.name), description: readDescription(body.description) };
+    // AM asset/update: a field that is not sent stays unchanged (before, a missing description emptied it).
+    const input = {
+      name: readName(body.name),
+      ...(body.description === undefined ? {} : { description: readDescription(body.description) }),
+    };
     // AM asset/update: tagList replaces the tags; without it the tags stay unchanged.
     const tagNames = body.tagList === undefined ? null : normalizeTagList(body.tagList);
     const asset = UUID.test(req.params.id) ? await AssetModel.update(req.params.id, input, actor, tagNames) : null;
@@ -207,12 +216,16 @@ export const AssetController = {
   async download(req: Request<IdParams>, res: Response) {
     const asset = await findAsset(req.params.id);
     const body = await openFile(asset);
-    await AssetModel.incrementDownloads(asset.id);
 
     res.attachment(asset.fileName);
     res.setHeader('Content-Length', asset.fileSize);
     res.setHeader('X-Content-Type-Options', 'nosniff');
+    // AM asset/download step 4: count only after the whole file was sent; a broken or cancelled transfer makes the
+    // pipeline fail and does not count. The file is already sent, so a failed count is only logged.
     await pipeline(body, res);
+    await AssetModel.incrementDownloads(asset.id).catch((error: unknown) => {
+      console.error(`Could not count the download of ${asset.id}`, error);
+    });
   },
 
   // GET /api/assets/:id/file: the file for the preview on the asset page (README "Náhled"). Shown in the browser,
