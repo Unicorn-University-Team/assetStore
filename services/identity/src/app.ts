@@ -3,6 +3,7 @@ import express from "express";
 import { prisma } from "./db/prisma";
 import { router } from "./routes/auth.routes";
 import { internalRoutes } from "./routes/internal.routes";
+import { userRoutes } from "./routes/user.routes";
 import { env } from "./config/env";
 import cookieParser from "cookie-parser";
 
@@ -28,6 +29,7 @@ app.get("/health", async (_req, res) => {
 //   /api/auth/...   registration, login, logout, current user
 //   /api/users/...  user list and deletion (admin)
 app.use("/api/auth", router);
+app.use("/api/users", userRoutes);
 // For other services only (README, Komunikace mezi službami).
 app.use("/internal", requireInternalKey(env.internalKey), internalRoutes);
 app.use(notFound);

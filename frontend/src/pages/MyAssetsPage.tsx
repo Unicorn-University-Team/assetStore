@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { describeFailure } from '../api/client'
-import { listMyAssets, type AssetPage } from '../api/assets'
+import { deleteAsset, listMyAssets, type Asset, type AssetPage } from '../api/assets'
 import { useAuth } from '../auth/auth-context'
 import AssetGrid from '../components/AssetGrid'
+import ConfirmDialog from '../components/ConfirmDialog'
+import InlineError from '../components/InlineError'
 import Pagination from '../components/Pagination'
 import StatusMessage from '../components/StatusMessage'
 import { useLiveTick } from '../useLiveTick'
@@ -16,13 +18,18 @@ export default function MyAssetsPage() {
   const request = `${ownerId}:${page}`
   const [loaded, setLoaded] = useState<{ request: string; result: AssetPage | null; error: string } | null>(null)
   const [retryKey, setRetryKey] = useState(0)
+  // US-3: the asset waiting for the owner's confirmation, and the result of the last deletion.
+  const [toDelete, setToDelete] = useState<Asset | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+  const [deletedName, setDeletedName] = useState('')
   // Download counts of the user's assets stay current without a reload.
   const tick = useLiveTick(30_000)
 
   useEffect(() => {
     if (!ownerId) return
     const controller = new AbortController()
-    listMyAssets(page, controller.signal)
+    listMyAssets(ownerId, page, controller.signal)
       .then((result) => setLoaded({ request, result, error: '' }))
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return
@@ -43,6 +50,31 @@ export default function MyAssetsPage() {
     setRetryKey((value) => value + 1)
   }
 
+  function askDelete(asset: Asset) {
+    setDeleteError('')
+    setDeletedName('')
+    setToDelete(asset)
+  }
+
+  async function confirmDelete() {
+    if (!toDelete) return
+    setDeleting(true)
+    try {
+      await deleteAsset(toDelete.id)
+      setDeletedName(toDelete.name)
+      setToDelete(null)
+      // Reload the page of assets quietly; the deleted one is gone from it and from the catalogue.
+      setRetryKey((value) => value + 1)
+    } catch (cause: unknown) {
+      setDeleteError(describeFailure(cause, 'Could not delete the asset.').message)
+      setToDelete(null)
+      // The asset may be gone even so (the catalogue deletes it before the related data), so show the current list.
+      setRetryKey((value) => value + 1)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   function changePage(nextPage: number) {
     const next = new URLSearchParams(params)
     if (nextPage <= 1) next.delete('page')
@@ -60,6 +92,8 @@ export default function MyAssetsPage() {
         </div>
         <Link className="button button-primary" to="/my/assets/new">New asset</Link>
       </div>
+      {deletedName && <p className="admin-notice" role="status">“{deletedName}” was deleted.</p>}
+      {deleteError && <InlineError message={deleteError} />}
       {loading && <StatusMessage kind="loading" title="Loading your assets" />}
       {!loading && error && (
         <StatusMessage kind="error" title="Could not load your assets" message={error}>
@@ -79,9 +113,30 @@ export default function MyAssetsPage() {
           )}
         </StatusMessage>
       )}
-      {!loading && !error && assets.length > 0 && <AssetGrid assets={assets} author={user?.username} />}
+      {!loading && !error && assets.length > 0 && (
+        <AssetGrid
+          assets={assets}
+          author={user?.username}
+          actions={(asset) => (
+            <>
+              <Link className="button button-secondary" aria-label={`Edit ${asset.name}`} to={`/my/assets/${encodeURIComponent(asset.id)}/edit`}>Edit</Link>
+              <button type="button" className="button button-secondary" aria-label={`Delete ${asset.name}`} onClick={() => askDelete(asset)}>Delete</button>
+            </>
+          )}
+        />
+      )}
       {!loading && !error && result && (
         <Pagination page={page} pageSize={result.pageSize} total={result.total} onChange={changePage} label="My assets pages" />
+      )}
+      {toDelete && (
+        <ConfirmDialog
+          title="Delete this asset?"
+          message={`“${toDelete.name}” will be removed from your assets and from the catalogue, together with its file. This cannot be undone.`}
+          confirmLabel={deleting ? 'Deleting…' : 'Delete'}
+          onConfirm={confirmDelete}
+          onCancel={() => setToDelete(null)}
+          busy={deleting}
+        />
       )}
     </main>
   )

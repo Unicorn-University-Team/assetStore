@@ -7,11 +7,13 @@ import {
   MAX_UPLOAD_BYTES,
   fileExtension,
   isAllowedAssetExtension,
+  previewProblem,
   uploadAsset,
   type AssetType,
 } from '../api/assets'
 import { useAuth } from '../auth/auth-context'
 import FormField from '../components/FormField'
+import PreviewUpload from '../components/PreviewUpload'
 import InlineError from '../components/InlineError'
 import TagInput, { type TagInputHandle } from '../components/TagInput'
 
@@ -30,6 +32,7 @@ type FormErrors = {
   description?: string
   type?: string
   file?: string
+  preview?: string
   tags?: string
 }
 
@@ -57,14 +60,16 @@ export default function NewAssetPage() {
   const [description, setDescription] = useState('')
   const [type, setType] = useState<AssetType | ''>('')
   const [file, setFile] = useState<File | null>(null)
+  const [preview, setPreview] = useState<File | null>(null)
   const [tags, setTags] = useState<string[]>([])
   const [errors, setErrors] = useState<FormErrors>({})
   const [formError, setFormError] = useState('')
   const [busy, setBusy] = useState(false)
   const suspended = user?.status === 'SUSPENDED'
   const locked = busy || suspended
-  // Required fields (US-1): name, type and file. The button stays off until each one has a value.
-  const canPublish = name.trim() !== '' && type !== '' && file !== null
+  // Required fields (US-1, AM route newAsset): name, type, file and preview. The button stays off until each one
+  // has a value.
+  const canPublish = name.trim() !== '' && type !== '' && file !== null && preview !== null
 
   function clearField(field: keyof FormErrors) {
     setFormError('')
@@ -106,16 +111,18 @@ export default function NewAssetPage() {
       if (!type) next.type = 'Select a type.'
       if (!file) next.file = 'Attach the asset file.'
       else next.file = fileProblem(file)
+      if (!preview) next.preview = 'Add a preview image.'
+      else next.preview = previewProblem(preview)
 
-      // Tags are existing ones or new ones the user confirmed with "Create tag" (US-1.1); the catalogue creates
-      // the new ones together with the asset. A tag still typed but not confirmed stops the publishing.
+      // Tags are existing ones or new ones the user confirmed with "Create tag" (US-1.1, created right then by
+      // tag/create). A tag still typed but not confirmed stops the publishing.
       const committed = (await tagsRef.current?.commit()) ?? { tags, error: '' }
       if (committed.error) next.tags = committed.error
       else if (committed.tags.length > 10) next.tags = 'You can add at most 10 tags.'
 
       setErrors(next)
       const problem = summary(next)
-      if (problem || !file || !type) {
+      if (problem || !file || !preview || !type) {
         setFormError(problem || 'The input is not valid.')
         return
       }
@@ -129,6 +136,7 @@ export default function NewAssetPage() {
         description: description.trim(),
         type,
         file,
+        preview,
         tags: committed.tags,
       })
       navigate(`/assets/${encodeURIComponent(asset.id)}`)
@@ -210,7 +218,19 @@ export default function NewAssetPage() {
             />
           </div>
         </FormField>
-        {/* Preview: comes back once the catalogue stores a preview image (not part of US-1). */}
+        <FormField id="asset-preview" label="Preview" requiredMark error={errors.preview}>
+          <PreviewUpload
+            id="asset-preview"
+            value={preview}
+            disabled={locked}
+            error={errors.preview}
+            onChange={(next, problem) => {
+              setPreview(next)
+              setFormError('')
+              setErrors((current) => ({ ...current, preview: problem }))
+            }}
+          />
+        </FormField>
         <FormField id="asset-tags" label="Tags" error={errors.tags}>
           <TagInput
             ref={tagsRef}

@@ -225,12 +225,15 @@ prohlížeč ──multipart──▶ Caddy ──▶ catalog ──▶ busboy �
                                                   └── po uložení souboru ──▶ PostgreSQL (záznam asset)
 ```
 
-1. **Frontend** pošle `multipart/form-data`: pole `name`, `description`, `type`, nepovinně `tagList` a soubor `file`. Textová pole jdou
-   první, soubor poslední (`uploadAsset()` ve `frontend/src/api/assets.ts`).
+1. **Frontend** pošle `multipart/form-data`: pole `name`, `description`, `type`, nepovinně `tagList`, obrázek náhledu
+   `preview` a soubor `file`. Textová pole jdou první, soubory poslední (`uploadAsset()` ve `frontend/src/api/assets.ts`).
 2. **Caddy** požadavek jen přepošle službě catalog, nic neukládá.
 3. **`receiveUpload()`** (`services/catalog/src/utils/receiveUpload.ts`) čte požadavek přes busboy:
    - zkontroluje příponu podle whitelistu `ALLOWED_EXTENSIONS` (`services/catalog/src/models/asset.model.ts`); nepovolená
      přípona → **400**, nic se neukládá;
+   - `preview` (AM `asset/create`, povinný): jen `png`, `jpg`, `jpeg`, `webp`, nejvýš **2 MB**, jinak **400**
+     (`invalidPreviewType`) nebo **413** (`previewTooLarge`); bez náhledu **400**. `Content-Type` náhledu je podle
+     přípony, ne od prohlížeče. Klíč `previews/<uuid>`;
    - vygeneruje klíč `assets/<uuid>`;
    - soubor **streamuje rovnou do S3**. Velký soubor jde po částech po 5 MB (S3 multipart upload) a v paměti jsou
      najednou nejvýš 4 části, tedy asi 20 MB. Celý soubor se nikdy nedrží v paměti ani neukládá na disk serveru.
@@ -239,7 +242,7 @@ prohlížeč ──multipart──▶ Caddy ──▶ catalog ──▶ busboy �
 5. **Kontrola polí** (`name` 1–100 znaků, `type` jeden z `2d`, `3d`, `map`, `sound`, `environment`, `description`
    do 2000 znaků, tagy podle [Tagy při publikaci](#tagy-při-publikaci-us-11)) proběhne po uložení souboru. Když něco
    nesedí, soubor se z S3 hned smaže a odpověď je **400**.
-6. **Záznam v databázi** se vytvoří, až když je soubor v S3: asset, chybějící tagy, vazby `asset_tag` a audit
+6. **Záznam v databázi** se vytvoří, až když je soubor v S3: asset, vazby `asset_tag` a audit
    `assetCreated` v jedné transakci. Odpověď **201** s novým assetem.
 
 ### Tagy při publikaci (US-1.1)
@@ -251,12 +254,18 @@ nebo jedno pole s JSON polem (`-F 'tagList=["medieval","low-poly"]'`). Bez `tagL
 2. Název musí mít 1–50 znaků: latinka, číslice, pomlčka (BR-05). Jinak **400** se jménem tagu a **nic** se nevytvoří:
    ani asset, ani žádný tag.
 3. Nejvýš 10 tagů na asset, jinak **400**.
-4. Existující tag se použije znovu (BR-03), chybějící se vytvoří (BR-02). Dva současné požadavky se stejným novým tagem
-   vytvoří jeden tag a oba projdou (`INSERT … ON CONFLICT DO NOTHING`), žádná 500.
-5. Potvrzení „vytvořit nový tag?“ řeší frontend; backend vytvoří všechny tagy, které v `tagList` přišly.
+4. Každý tag musí už existovat (AM `asset/create` krok 3), jinak **400** `Tag "<název>" does not exist; create it first`
+   a nic se neuloží. Chybějící tag se nejdřív vytvoří přes `POST /api/tags` (AM `tag/create`).
+5. Potvrzení „vytvořit nový tag?“ řeší frontend (`TagInput`): po potvrzení zavolá `POST /api/tags` a teprve potom
+   dá tag k assetu.
+
+`POST /api/tags` `{ "name": "Low-Poly" }` (jen přihlášený, jinak **401**): název se ořízne a převede na malá písmena,
+pravidla jako v bodě 2 (jinak **400**). Odpověď **201** `{ id, name }`, existující název **409**
+`Tag "<název>" already exists`. Dva současné požadavky se stejným novým názvem dají jeden tag a jednu 409, žádnou 500
+(`INSERT … ON CONFLICT DO NOTHING`).
 
 Pravidla jsou v `services/catalog/src/utils/tags.ts` (testy `npm test` v `services/catalog`), uložení
-v `AssetModel.setTags()`: stejnou funkci použije úprava assetu (US-2). Smazání assetu smaže jeho vazby, tagy zůstanou.
+v `AssetModel.setTags()` (bere jen existující tagy, `TagModel.findExisting`): stejnou funkci použije úprava assetu (US-2). Smazání assetu smaže jeho vazby, tagy zůstanou.
 
 Když se cokoli pokazí, i když uživatel zavře stránku uprostřed nahrávání, v S3 nic nezůstane. Případné nedokončené
 části multipart uploadu navíc po 1 dni smaže lifecycle pravidlo bucketu.
@@ -264,18 +273,36 @@ Když se cokoli pokazí, i když uživatel zavře stránku uprostřed nahráván
 ### Stažení: `GET /api/assets/:id/download`
 
 1. Backend najde záznam; neexistující id → **404**.
-2. Otevře soubor v S3 a zvýší `downloadCount` o 1. `downloadCount` mění jen server. Když soubor v S3 chybí,
-   odpoví **404** `The file of this asset is missing`, jiná chyba S3 → **502**.
+2. Otevře soubor v S3. Když soubor v S3 chybí, odpoví **404** `The file of this asset is missing`, jiná chyba
+   S3 → **502**.
 3. Soubor **streamuje** do prohlížeče s hlavičkou `Content-Disposition: attachment; filename="<původní jméno>"`,
    takže se stáhne pod původním jménem, a s `X-Content-Type-Options: nosniff`, aby ho prohlížeč nikdy nezobrazil
    jako stránku.
+4. Teprve po přenosu celého souboru zvýší `downloadCount` o 1 (AM `asset/download` krok 4). Přerušené nebo zrušené
+   stažení se nepočítá. `downloadCount` mění jen server.
 
 Ve frontendu stačí obyčejný odkaz s atributem `download`: `<a href={downloadUrl(asset.id)} download>Stáhnout</a>`.
 Chybová odpověď pak skončí jako nepovedené stažení v prohlížeči a stránka zůstane.
 
-### Náhled: `GET /api/assets/:id/file`
+### Obrázek náhledu: `GET /api/assets/:id/preview`
 
-Soubor pro **zobrazení na stránce assetu**, ne ke stažení (podrobně `docs/asset-preview/spec.md`):
+AM `asset/preview` (US-12): obrázek náhledu z privátního S3 (`preview_key`), s uloženým `Content-Type`. Tuhle adresu
+vrací `previewUrl` v každém assetu, používají ji karty v katalogu, My assets a stránka assetu. `downloadCount` se nemění.
+
+- Náhled se nahrává při publikaci (povinný) a při úpravě (`PUT /api/assets/:id` jako `multipart/form-data` s polem
+  `preview`, nepovinné). Nový náhled nahradí starý, starý se z S3 smaže až po uložení. Když úprava selže, smaže se
+  nový a starý zůstane.
+- `ETag` je klíč v S3 a `Cache-Control: private, no-cache`: prohlížeč se zeptá znovu, ale dokud je obrázek stejný,
+  dostane **304**. Po novém náhledu hned vidí nový.
+- Asset bez náhledu → **404** `This asset has no preview`, chyba S3 → **502** (`previewReadFailed`).
+- Assety nahrané před náhledy: migrace `asset_preview` u obrázků `png`/`jpg`/`jpeg`/`webp` do 5 MB nastavila jako náhled
+  samotný soubor (stejný objekt v S3; takový náhled se samostatně nikdy nemaže). Ostatní staré assety mají
+  `previewUrl: null`, dokud jim vlastník nepřidá náhled v úpravě.
+- Při smazání assetu se smaže soubor i náhled (AM `asset/delete` krok 6).
+
+### Soubor na stránce assetu: `GET /api/assets/:id/file`
+
+Není v AM. Soubor pro **3D prohlížeč a přehrávač zvuku na stránce assetu**, ne ke stažení (podrobně `docs/asset-preview/spec.md`):
 
 | | `/download` | `/file` |
 |---|---|---|
@@ -290,7 +317,6 @@ Soubor pro **zobrazení na stránce assetu**, ne ke stažení (podrobně `docs/a
 - **Range** (`Range: bytes=0-99` → **206** + `Content-Range`, mimo soubor → **416**): přehrávač zvuku přetáčí,
   rozsah jde rovnou do S3.
 - `Cache-Control: private, max-age=3600`: soubor assetu se po nahrání nemění.
-- `previewUrl` v assetu je tahle adresa pro obrázky do 5 MB (karty v katalogu), jinak `null`.
 
 Ve frontendu ho používá `components/AssetPreview.tsx`:
 - **obrázek:** `<img>`;
@@ -328,10 +354,10 @@ s touto zprávou.
 ### Vyzkoušení přes curl
 
 ```bash
-curl -b cookies.txt -F name='Meč' -F type=3d -F description='Low poly' -F tagList=medieval -F file=@sword.glb http://localhost:3002/api/assets
+curl -b cookies.txt -F name='Meč' -F type=3d -F description='Low poly' -F tagList=medieval -F preview=@sword.png -F file=@sword.glb http://localhost:3002/api/assets
 curl 'http://localhost:3002/api/assets?name=meč&pageIndex=0&pageSize=20'
-curl -b cookies.txt 'http://localhost:3002/api/assets/my'      # moje assety (My assets), jen přihlášený
-curl 'http://localhost:3002/api/assets?ownerId=<id uživatele>'   # assety jednoho uživatele
+curl 'http://localhost:3002/api/assets?ownerId=<id uživatele>'   # assety jednoho uživatele (i My assets)
+curl -b cookies.txt -H 'Content-Type: application/json' -d '{"name":"medieval"}' http://localhost:3002/api/tags   # nový tag
 curl 'http://localhost:3002/api/assets?tagList=medieval&tagList=low-poly'   # jen assety se všemi těmito tagy
 curl -OJ http://localhost:3002/api/assets/<id>/download     # uloží soubor pod původním jménem
 curl -b cookies.txt -X DELETE http://localhost:3002/api/assets/<id>
@@ -359,16 +385,17 @@ při čtení doptají identity přes `/internal` (viz [Komunikace mezi službami
 
 | Metoda | Cesta | Kdo | Co dělá |
 |---|---|---|---|
-| `POST` | `/api/assets/:id/reports` | přihlášený | US-5: `{ reason, comment? }` → **201** report |
-| `GET` | `/api/reports?status=&pageIndex=&pageSize=` | admin | seznam od nejnovějších; `status` `open` (výchozí), `resolved`, `rejected` nebo `all`; stránky jako u assetů: `{ itemList, pageInfo }` |
+| `POST` | `/api/assets/:id/reports` | přihlášený | US-5: `{ reason }` → **201** report; zablokovaný uživatel (`SUSPENDED`) → **403** |
+| `GET` | `/api/reports?status=&assetOwnerId=&pageIndex=&pageSize=` | admin | seznam od nejnovějších; `status` `open` (výchozí), `resolved`, `rejected` nebo `all`; `assetOwnerId` (nepovinné, UUID) = jen reporty na assety tohoto vlastníka; stránky jako u assetů: `{ itemList, pageInfo }` |
 | `GET` | `/api/reports/:id` | admin | jeden report |
-| `POST` | `/api/reports/:id/reject` | admin | US-7: zamítnutí, `open` → `rejected`, zapíše `reportRejected` do audit logu |
+| `POST` | `/api/reports/:id/deny` | admin | US-7 (AM `report/deny`): zamítnutí, `open` → `rejected`, zapíše `reportRejected` do audit logu |
 
 - **Důvody** (`reason`, podle AM): `inappropriateContent`, `copyright`, `spam`, `brokenFile`, `other`. `comment` je
   nepovinný, nejvýš 500 znaků. Stejný seznam je ve frontendu (`frontend/src/api/reports.ts`) a jako CHECK v databázi.
 - **Stavy:** `open` → `resolved` (US-6, přijetí: zatím chybí) nebo `rejected` (US-7). Rozhodnutý report má
   `decidedById` a `decidedAt`.
-- **Pravidla:** vlastní asset nahlásit nejde (**403**), stejný uživatel má na jeden asset nejvýš jeden otevřený
+- **Pravidla:** vlastní asset nahlásit nejde (**403**), zablokovaný uživatel nahlásit nejde (**403**; stav se ověří
+  v identity, když neodpoví → **503**), stejný uživatel má na jeden asset nejvýš jeden otevřený
   report (**409**; v databázi částečný unikátní index `report_one_open_per_author_asset`, platí i pro dva požadavky
   najednou), neexistující asset → **404**. Rozhodnutý report znovu zamítnout nejde (**409**). Seznam, detail
   a zamítnutí bez role admin → **403**, bez přihlášení **401**. Bez `JWT_PUBLIC_KEY` odpoví community **503**.
@@ -420,9 +447,17 @@ Registraci a přihlášení dělá služba identity:
 |---|---|---|
 | `POST` | `/api/auth/register` | `{ username, email, password }` → **201** `{ id, username, email }`, obsazené jméno nebo e-mail → **409** (jméno bez ohledu na velikost písmen: `Tester` = `tester`) |
 | `POST` | `/api/auth/login` | `{ email, password }` → nastaví cookies `access_token` a `refresh_token`, zablokovaný účet → **403** |
-| `GET` | `/api/auth/me` | přihlášený uživatel `{ user: { id, username, email, role, status } }`; bez jakékoli cookie session `{ user: null }` (**200**, nikdo není přihlášený), s neplatným nebo prošlým tokenem **401** |
+| `GET` | `/api/auth/me` | přihlášený uživatel `{ user: { id, username, email, role, status, confirmedViolations, suspendedAt } }`; bez jakékoli cookie session `{ user: null }` (**200**, nikdo není přihlášený), s neplatným nebo prošlým tokenem **401** |
 | `POST` | `/api/auth/refresh` | vymění refresh token za nový access token a nový refresh token |
 | `POST` | `/api/auth/logout` | zruší session a smaže obě cookies |
+| `GET` | `/api/users?status=&pageIndex=&pageSize=` | jen admin (AM `user/list`, US-8): stránka účtů, `status` = `active` nebo `suspended` (zablokovaní uživatelé, nejnovější zablokování první), jinak **400**: `{ itemList: [{ id, username, email, role, status, confirmedViolations, suspendedAt, createdAt }], pageInfo }`; bez přihlášení **401**, uživatel **403** |
+| `GET` | `/api/users/:id` | jen admin (AM `user/get`): jeden účet se stejnými poli, neznámé id **404**; historii porušení vrací `GET /api/reports?status=resolved&assetOwnerId=` |
+
+**Porušení pravidel (US-6, AM `user/addViolation`):** každý přijatý report vlastníkovi assetu přidá jedno potvrzené
+porušení (`confirmedViolations`). Report se počítá jen jednou: tabulka `user_violation` má klíč `report_id`. U pátého
+porušení se účet zablokuje (`status` `SUSPENDED`, `suspendedAt`) a zruší se všechny jeho session; access token ještě
+platí až 15 minut. `user/removeViolation` porušení daného reportu vrátí zpět (když report/accept nemohl uložit
+rozhodnutí) a zablokování zruší, když jich je zase méně než 5. Zrušené session zůstanou zrušené.
 
 - **Access token** je JWT podepsaný RS256: `sub` = id uživatele, `role` = `USER` nebo `ADMIN`, platí 15 minut.
   Identity podepisuje soukromým klíčem, ostatní služby ověřují veřejným (zatím catalog).
@@ -498,7 +533,9 @@ community ──GET /internal/assets/:id/exists──▶ catalog ──▶ datab
 | Služba | Cesta | Odpověď | Kdo volá |
 |---|---|---|---|
 | catalog | `GET /internal/assets/:id/exists` | `{ "exists": boolean }` | community |
-| identity | `GET /internal/users?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "id", "username" }] }`, neznámá id chybí | catalog (`ownerName`), community (jména v reportech) |
+| identity | `POST /internal/users/:id/violations` `{ reportId }` | účet (jako `GET /api/users/:id`); stejný report podruhé nic nezmění; neznámý účet **404** | community (report/accept) |
+| identity | `POST /internal/users/:id/violations/:reportId/remove` | `{}`; neznámý účet **404** | community (report/accept, když se rozhodnutí neuloží) |
+| identity | `GET /internal/users?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "id", "username", "status" }] }` (`ACTIVE` / `SUSPENDED`), neznámá id chybí | catalog (`ownerName`, zablokovaný uživatel nesmí publikovat), community (jména v reportech, zablokovaný autor nesmí nahlásit asset) |
 | catalog | `GET /internal/assets?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "id", "name", "ownerId" }] }`, smazané assety chybí | community (reporty) |
 | community | `GET /internal/reviews/summaries?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "assetId", "averageRating", "reviewCount" }] }`, assety bez recenzí chybí | catalog (hodnocení assetů) |
 | community | `DELETE /internal/assets/:assetId` | `{ "reviews", "collectionLinks", "reports", "keptReports" }` (počty): smaže recenze, položky kolekcí a reporty `open` a `rejected` assetu; reporty `resolved` zůstanou jako historie s `assetId: null` | catalog (smazání assetu, US-3) |
@@ -604,21 +641,22 @@ Endpointy mají **catalog** (assety), **identity** (přihlášení, viz [Přihl�
 |---|---|---|
 | `GET` | `/api/health/<služba>` | stav služby `identity`, `catalog` nebo `community`: `{ service, status, database }` (catalog i `storage`), při chybě 503 |
 | `GET` | `/api/assets?name=&ownerId=&tagList=&pageIndex=&pageSize=` | seznam od nejnovějších, hledání v názvu bez ohledu na velikost písmen (`%` a `_` jsou obyčejné znaky); `ownerId` (uuid, jinak 400) vrátí jen assety tohoto uživatele (stránka „Moje assety“); `tagList` = názvy tagů, parametr jednou na tag (`tagList=medieval&tagList=low-poly`), vrátí jen assety, které mají **všechny** tyto tagy; stejná pravidla jako při publikaci (velikost písmen se ignoruje, nejvýš 10, neplatný název → 400), neznámý tag → prázdný seznam; stránky od 0, `pageSize` 1–100 (výchozí 20), jinak 400: `{ itemList, pageInfo: { pageIndex, pageSize, total } }` |
-| `GET` | `/api/assets/my?pageIndex=&pageSize=` | US-1 „My assets“ (AM `asset/listMy`): jen assety přihlášeného uživatele (vlastník z tokenu), od nejnovějších, stránkování jako u seznamu; bez přihlášení **401**, žádné assety = prázdný `itemList` |
 | `GET` | `/api/assets/:id` | jeden asset |
-| `POST` | `/api/assets` | nahrání, `multipart/form-data`: `name`, `description`, `type`, `tagList` (nepovinné, viz [Tagy při publikaci](#tagy-při-publikaci-us-11)), `file`; potřebuje přihlášení |
-| `PUT` | `/api/assets/:id` | JSON `{ name, description }`, soubor se nemění; jen vlastník, jinak **403** |
+| `POST` | `/api/assets` | nahrání, `multipart/form-data`: `name`, `description`, `type`, `tagList` (nepovinné, viz [Tagy při publikaci](#tagy-při-publikaci-us-11)), `preview` (obrázek do 2 MB), `file`; potřebuje přihlášení, zablokovaný účet (`SUSPENDED`) → **403** (AM `userSuspended`) |
+| `PUT` | `/api/assets/:id` | JSON `{ name, description?, tagList? }`, s novým náhledem `multipart/form-data` (stejná pole + `preview`, `tagList` jako JSON pole); bez `description` zůstane popis beze změny; `tagList` nahradí tagy (každý musí existovat, jinak **400**), bez něj zůstanou, soubor se nemění; jen vlastník, jinak **403** |
 | `DELETE` | `/api/assets/:id` | smaže záznam i soubor; jen vlastník nebo admin, jinak **403** |
-| `GET` | `/api/assets/:id/download` | stažení souboru, `downloadCount` + 1 |
-| `GET` | `/api/assets/:id/file` | soubor pro náhled (obrázek, glTF, zvuk), `inline`, Range, `downloadCount` beze změny; jiný formát **404** |
+| `GET` | `/api/assets/:id/download` | stažení souboru, `downloadCount` + 1 až po celém přenosu (přerušené stažení se nepočítá) |
+| `GET` | `/api/assets/:id/preview` | obrázek náhledu (AM `asset/preview`), `ETag` + **304**, `downloadCount` beze změny; bez náhledu **404** |
+| `GET` | `/api/assets/:id/file` | soubor pro 3D prohlížeč a zvuk na stránce assetu (není v AM), `inline`, Range, `downloadCount` beze změny; jiný formát **404** |
+| `POST` | `/api/tags` | nový tag (AM `tag/create`, US-1.1) `{ name }`: jen přihlášený, **201** `{ id, name }`, neplatný název **400**, existující **409** |
 | `GET` | `/api/tags?prefix=` | nápověda tagů a filtr (AM `tag/list`): nejvýš 10 tagů začínajících na `prefix` (bez ohledu na velikost písmen, nejvýš 50 znaků, jinak **400**), řazeno podle názvu: `{ itemList: [{ id, name }] }` |
 
 Asset v odpovědi (`services/catalog/src/views/asset.view.ts`). `ownerId` je id uživatele z identity (u starých
 assetů `null`), `ownerName` jeho uživatelské jméno: catalog se na jména ptá identity (`GET /internal/users`,
 viz [Komunikace mezi službami](#komunikace-mezi-službami)). Když identity neodpoví, je `ownerName` `null` a katalog
-funguje dál. `previewUrl` je adresa náhledu u obrázků do 5 MB (jinak `null`, viz [Náhled](#náhled-get-apiassetsidfile)).
+funguje dál. `previewUrl` je `/api/assets/<id>/preview` (jen u starých assetů bez náhledu `null`, viz [Obrázek náhledu](#obrázek-náhledu-get-apiassetsidpreview)).
 `tagList` jsou názvy tagů podle abecedy. `averageRating` (na jedno desetinné místo) a `reviewCount` v `GET /api/assets`,
-`GET /api/assets/my`, `GET /api/assets/:id` a `PUT /api/assets/:id` počítá community (jedno volání
+`GET /api/assets/:id` a `PUT /api/assets/:id` počítá community (jedno volání
 `GET /internal/reviews/summaries` na odpověď). Bez recenzí, nebo když community neodpoví, je `averageRating` `null`
 a `reviewCount` 0 a katalog funguje dál. Nový asset z `POST /api/assets` recenze ještě nemá, proto vrací `null` a 0:
 
@@ -633,7 +671,7 @@ a `reviewCount` 0 a katalog funguje dál. Nový asset z `POST /api/assets` recen
   "tagList": ["low-poly", "medieval"],
   "fileName": "sword.glb",
   "fileSize": 300000,
-  "previewUrl": null,
+  "previewUrl": "/api/assets/1f628f53-d68c-47d0-b147-0f7b0386ad43/preview",
   "downloadCount": 0,
   "averageRating": null,
   "reviewCount": 0,

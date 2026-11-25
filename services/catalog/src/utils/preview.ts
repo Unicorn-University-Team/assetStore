@@ -1,4 +1,4 @@
-// Files the browser can show on the asset page (GET /api/assets/:id/file, README "Náhled").
+// Files the browser can show on the asset page (GET /api/assets/:id/file, README "Soubor na stránce assetu").
 // The content type comes from this table, never from the uploader, and nothing here can run a script
 // (no SVG, no HTML), so a file opened directly in a tab stays a picture, a model or a sound.
 const PREVIEW_TYPES: Record<string, string> = {
@@ -15,9 +15,6 @@ const PREVIEW_TYPES: Record<string, string> = {
   flac: 'audio/flac',
 };
 
-// Catalog cards show the picture itself only up to this size, so a page of cards never loads hundreds of MB.
-const CARD_IMAGE_MAX_BYTES = 5 * 1024 ** 2;
-
 function extension(fileName: string): string {
   const dot = fileName.lastIndexOf('.');
   return dot >= 0 ? fileName.slice(dot + 1).toLowerCase() : '';
@@ -28,10 +25,20 @@ export function previewContentType(fileName: string): string | null {
   return PREVIEW_TYPES[extension(fileName)] ?? null;
 }
 
-// The URL cards use as their picture: small images only, everything else keeps the drawn cover.
-export function cardPreviewUrl(asset: { id: string; fileName: string; fileSize: number }): string | null {
-  const type = previewContentType(asset.fileName);
-  return type?.startsWith('image/') && asset.fileSize <= CARD_IMAGE_MAX_BYTES ? `/api/assets/${asset.id}/file` : null;
+// AM asset limits: the preview image of an asset (asset/create, asset/update, asset/preview). Its content type comes
+// from this table, never from the uploader.
+export const PREVIEW_MAX_BYTES = 2 * 1024 ** 2;
+export const PREVIEW_IMAGE_TYPES: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+};
+export const PREVIEW_EXTENSIONS: ReadonlySet<string> = new Set(Object.keys(PREVIEW_IMAGE_TYPES));
+
+// AM asset/list dtoOut previewUrl: the asset/preview route. null only for an old asset uploaded before previews.
+export function previewUrlOf(asset: { id: string; previewKey: string | null }): string | null {
+  return asset.previewKey ? `/api/assets/${asset.id}/preview` : null;
 }
 
 export type ByteRange = { start: number; end: number };
