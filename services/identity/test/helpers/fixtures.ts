@@ -39,7 +39,7 @@ export function resetData(passwordHash: string): void {
     users.set(ids[role], {
       id: ids[role], username: `auth3-${role.toLowerCase()}`,
       email: `${role.toLowerCase()}@auth3.example.test`, passwordHash,
-      role, status: 'ACTIVE', createdAt: timestamp, updatedAt: timestamp,
+      role, status: 'ACTIVE', confirmedViolations: 0, suspendedAt: null, createdAt: timestamp, updatedAt: timestamp,
     });
   }
   assets.set(ids.asset, {
@@ -110,7 +110,10 @@ export const identityDb = {
       return select ? Object.fromEntries(Object.entries(user).filter(([key]) => select[key as keyof User])) : { ...user };
     }),
     create: vi.fn(async ({ data }: { data: Pick<User, 'username' | 'email' | 'passwordHash'> }) => {
-      const user: User = { ...data, id: ids.registered, role: 'USER', status: 'ACTIVE', createdAt: timestamp, updatedAt: timestamp };
+      const user: User = {
+        ...data, id: ids.registered, role: 'USER', status: 'ACTIVE', confirmedViolations: 0, suspendedAt: null,
+        createdAt: timestamp, updatedAt: timestamp,
+      };
       users.set(user.id, user);
       return { ...user };
     }),

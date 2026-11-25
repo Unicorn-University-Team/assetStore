@@ -416,9 +416,17 @@ Registraci a přihlášení dělá služba identity:
 |---|---|---|
 | `POST` | `/api/auth/register` | `{ username, email, password }` → **201** `{ id, username, email }`, obsazené jméno nebo e-mail → **409** (jméno bez ohledu na velikost písmen: `Tester` = `tester`) |
 | `POST` | `/api/auth/login` | `{ email, password }` → nastaví cookies `access_token` a `refresh_token`, zablokovaný účet → **403** |
-| `GET` | `/api/auth/me` | přihlášený uživatel `{ user: { id, username, email, role, status } }`; bez jakékoli cookie session `{ user: null }` (**200**, nikdo není přihlášený), s neplatným nebo prošlým tokenem **401** |
+| `GET` | `/api/auth/me` | přihlášený uživatel `{ user: { id, username, email, role, status, confirmedViolations, suspendedAt } }`; bez jakékoli cookie session `{ user: null }` (**200**, nikdo není přihlášený), s neplatným nebo prošlým tokenem **401** |
 | `POST` | `/api/auth/refresh` | vymění refresh token za nový access token a nový refresh token |
 | `POST` | `/api/auth/logout` | zruší session a smaže obě cookies |
+| `GET` | `/api/users?status=&pageIndex=&pageSize=` | jen admin (AM `user/list`, US-8): stránka účtů, `status` = `active` nebo `suspended` (zablokovaní uživatelé, nejnovější zablokování první), jinak **400**: `{ itemList: [{ id, username, email, role, status, confirmedViolations, suspendedAt, createdAt }], pageInfo }`; bez přihlášení **401**, uživatel **403** |
+| `GET` | `/api/users/:id` | jen admin (AM `user/get`): jeden účet se stejnými poli, neznámé id **404**; historii porušení vrací `GET /api/reports?status=resolved&assetOwnerId=` |
+
+**Porušení pravidel (US-6, AM `user/addViolation`):** každý přijatý report vlastníkovi assetu přidá jedno potvrzené
+porušení (`confirmedViolations`). Report se počítá jen jednou: tabulka `user_violation` má klíč `report_id`. U pátého
+porušení se účet zablokuje (`status` `SUSPENDED`, `suspendedAt`) a zruší se všechny jeho session; access token ještě
+platí až 15 minut. `user/removeViolation` porušení daného reportu vrátí zpět (když report/accept nemohl uložit
+rozhodnutí) a zablokování zruší, když jich je zase méně než 5. Zrušené session zůstanou zrušené.
 
 - **Access token** je JWT podepsaný RS256: `sub` = id uživatele, `role` = `USER` nebo `ADMIN`, platí 15 minut.
   Identity podepisuje soukromým klíčem, ostatní služby ověřují veřejným (zatím catalog).
@@ -494,6 +502,8 @@ community ──GET /internal/assets/:id/exists──▶ catalog ──▶ datab
 | Služba | Cesta | Odpověď | Kdo volá |
 |---|---|---|---|
 | catalog | `GET /internal/assets/:id/exists` | `{ "exists": boolean }` | community |
+| identity | `POST /internal/users/:id/violations` `{ reportId }` | účet (jako `GET /api/users/:id`); stejný report podruhé nic nezmění; neznámý účet **404** | community (report/accept) |
+| identity | `POST /internal/users/:id/violations/:reportId/remove` | `{}`; neznámý účet **404** | community (report/accept, když se rozhodnutí neuloží) |
 | identity | `GET /internal/users?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "id", "username", "status" }] }` (`ACTIVE` / `SUSPENDED`), neznámá id chybí | catalog (`ownerName`), community (jména v reportech, zablokovaný autor nesmí nahlásit asset) |
 | catalog | `GET /internal/assets?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "id", "name", "ownerId" }] }`, smazané assety chybí | community (reporty) |
 | community | `GET /internal/reviews/summaries?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "assetId", "averageRating", "reviewCount" }] }`, assety bez recenzí chybí | catalog (hodnocení assetů) |

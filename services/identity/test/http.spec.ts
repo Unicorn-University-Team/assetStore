@@ -108,6 +108,7 @@ describe('AUTH-3: existing HTTP routes', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ user: {
       id: ids[role], username: `auth3-${role.toLowerCase()}`, email: `${role.toLowerCase()}@auth3.example.test`, role, status: 'ACTIVE',
+      confirmedViolations: 0, suspendedAt: null,
     } });
     expect(identityDb.session.create).toHaveBeenCalledTimes(1);
   });
