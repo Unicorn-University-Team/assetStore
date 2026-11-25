@@ -1,22 +1,23 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { describeFailure } from '../api/client'
-import { getAsset, updateAsset, type Asset } from '../api/assets'
+import { getAsset, previewProblem, updateAsset, type Asset } from '../api/assets'
 import { useAuth } from '../auth/auth-context'
 import FormField from '../components/FormField'
 import InlineError from '../components/InlineError'
+import PreviewUpload from '../components/PreviewUpload'
 import StatusMessage from '../components/StatusMessage'
 import TagInput, { type TagInputHandle } from '../components/TagInput'
 import { usePageTitle } from '../usePageTitle'
 
-type FormErrors = { name?: string; description?: string; tags?: string }
+type FormErrors = { name?: string; description?: string; preview?: string; tags?: string }
 
 function sameTags(a: string[], b: string[]): boolean {
   return a.length === b.length && [...a].sort().join(',') === [...b].sort().join(',')
 }
 
-// US-2 (AM route editAsset): the owner changes the name, description and tags of an asset. The type and the file
-// cannot be changed and are not shown; reviews and the download count stay as they are.
+// US-2 (AM route editAsset): the owner changes the name, description, tags and optionally the preview image of an
+// asset. The type and the file cannot be changed and are not shown; reviews and the download count stay as they are.
 export default function EditAssetPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
@@ -26,6 +27,7 @@ export default function EditAssetPage() {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [tags, setTags] = useState<string[]>([])
+  const [preview, setPreview] = useState<File | null>(null)
   const [errors, setErrors] = useState<FormErrors>({})
   const [formError, setFormError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -52,7 +54,8 @@ export default function EditAssetPage() {
   usePageTitle(notOwner ? 'Access denied' : asset ? `Edit: ${asset.name}` : 'Edit asset')
 
   const changed = asset !== null && (
-    name.trim() !== asset.name || description.trim() !== asset.description || !sameTags(tags, asset.tagList)
+    name.trim() !== asset.name || description.trim() !== asset.description || !sameTags(tags, asset.tagList) ||
+    preview !== null
   )
   // AM editAsset SaveButton: disabled if the name is empty, if nothing has changed and while saving.
   const canSave = name.trim() !== '' && changed && !busy
@@ -68,6 +71,7 @@ export default function EditAssetPage() {
       if (!cleanName) next.name = 'Enter a name.'
       else if (cleanName.length > 100) next.name = 'Name must be 100 characters or fewer.'
       if (description.length > 2000) next.description = 'Description must be 2000 characters or fewer.'
+      if (preview) next.preview = previewProblem(preview)
       // A tag still typed but not confirmed stops the saving, like when publishing (US-1.1).
       const committed = (await tagsRef.current?.commit()) ?? { tags, error: '' }
       if (committed.error) next.tags = committed.error
@@ -79,7 +83,11 @@ export default function EditAssetPage() {
         return
       }
 
-      const saved = await updateAsset(asset.id, { name: cleanName, description: description.trim(), tagList: committed.tags })
+      const saved = await updateAsset(
+        asset.id,
+        { name: cleanName, description: description.trim(), tagList: committed.tags },
+        preview,
+      )
       navigate(`/assets/${encodeURIComponent(saved.id)}`)
     } catch (cause) {
       setFormError(describeFailure(cause, 'The changes could not be saved.').message)
@@ -147,6 +155,20 @@ export default function EditAssetPage() {
               setDescription(event.target.value)
               setFormError('')
               setErrors((current) => ({ ...current, description: undefined }))
+            }}
+          />
+        </FormField>
+        <FormField id="asset-preview" label="Preview" error={errors.preview}>
+          <PreviewUpload
+            id="asset-preview"
+            value={preview}
+            currentUrl={asset.previewUrl}
+            disabled={busy}
+            error={errors.preview}
+            onChange={(next, problem) => {
+              setPreview(next)
+              setFormError('')
+              setErrors((current) => ({ ...current, preview: problem }))
             }}
           />
         </FormField>

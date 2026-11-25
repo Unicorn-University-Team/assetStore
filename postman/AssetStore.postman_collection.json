@@ -480,13 +480,19 @@
                   "key": "tagList",
                   "value": "medieval",
                   "type": "text",
-                  "description": "Optional; one field per tag (max 10), lower-cased; a missing tag is created. Wrong name → 400"
+                  "description": "Optional; one field per tag (max 10), lower-cased; every tag must exist (Tags / Create), else 400"
                 },
                 {
                   "key": "tagList",
                   "value": "Low-Poly",
                   "type": "text",
                   "description": "Second tag (saved as low-poly)"
+                },
+                {
+                  "key": "preview",
+                  "type": "file",
+                  "src": [],
+                  "description": "Required (AM): png, jpg, jpeg or webp, at most 2 MB"
                 },
                 {
                   "key": "file",

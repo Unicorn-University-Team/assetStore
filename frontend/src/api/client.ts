@@ -137,6 +137,10 @@ export function apiPostForm<T>(path: string, form: FormData, headers?: HeadersIn
   return request<T>(path, { method: 'POST', body: form, headers })
 }
 
+export function apiPutForm<T>(path: string, form: FormData, headers?: HeadersInit): Promise<T> {
+  return request<T>(path, { method: 'PUT', body: form, headers })
+}
+
 export function apiDelete(path: string, headers?: HeadersInit): Promise<void> {
   return request<void>(path, { method: 'DELETE', headers })
 }
