@@ -26,9 +26,13 @@ export const ALLOWED_EXTENSIONS: ReadonlySet<string> = new Set([
   'zip', '7z', 'unitypackage', 'tmx',
 ]);
 
-export type AssetInput = Pick<Asset, 'name' | 'description' | 'type' | 'fileKey' | 'fileName' | 'fileSize' | 'contentType'>;
+export type AssetInput = Pick<
+  Asset,
+  'name' | 'description' | 'type' | 'fileKey' | 'fileName' | 'fileSize' | 'contentType' | 'previewKey' | 'previewContentType'
+>;
 // description is optional: when it is not sent, it stays as it is.
-export type AssetUpdate = Pick<Asset, 'name'> & Partial<Pick<Asset, 'description'>>;
+// previewKey and previewContentType only with a new preview (AM asset/update step 7).
+export type AssetUpdate = Pick<Asset, 'name'> & Partial<Pick<Asset, 'description' | 'previewKey' | 'previewContentType'>>;
 
 export type Actor = { id: string; role: 'USER' | 'ADMIN' };
 
@@ -118,7 +122,13 @@ export const AssetModel = {
 
   // An update that changes nothing is not logged.
   // tagNames null = the tags stay as they are (a request without tagList).
-  update(id: string, input: AssetUpdate, actor: Actor, tagNames: string[] | null = null): Promise<AssetWithTags | null> {
+  // Returns the asset before and after: the caller deletes the replaced preview from S3 once all is saved.
+  update(
+    id: string,
+    input: AssetUpdate,
+    actor: Actor,
+    tagNames: string[] | null = null,
+  ): Promise<{ before: AssetWithTags; after: AssetWithTags } | null> {
     return prisma.$transaction(async (tx) => {
       const before = await tx.asset.findUnique({ where: { id }, include: withTags });
       if (!before) return null;
@@ -145,7 +155,7 @@ export const AssetModel = {
           actorId: actor.id,
         });
       }
-      return after;
+      return { before, after };
     });
   },
 

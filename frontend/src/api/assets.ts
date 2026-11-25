@@ -1,4 +1,4 @@
-import { API_URL, apiDelete, apiGet, apiPostForm, apiPut } from './client'
+import { API_URL, apiDelete, apiGet, apiPostForm, apiPut, apiPutForm } from './client'
 
 export const ASSET_TYPES = ['2d', '3d', 'map', 'sound', 'environment'] as const
 export type AssetType = (typeof ASSET_TYPES)[number]
@@ -11,7 +11,9 @@ export const ASSET_FILE_EXTENSIONS = [
   'wav', 'mp3', 'ogg', 'flac',
   'zip', '7z', 'unitypackage', 'tmx',
 ] as const
-export const PREVIEW_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif'] as const
+// AM asset limits: the preview image (allowedPreviewExtensions, maxPreviewSizeMb).
+export const PREVIEW_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp'] as const
+export const MAX_PREVIEW_BYTES = 2 * 1024 * 1024
 
 export function fileExtension(fileName: string): string {
   const dot = fileName.lastIndexOf('.')
@@ -24,6 +26,13 @@ export function isAllowedAssetExtension(extension: string): boolean {
 
 export function isAllowedPreviewExtension(extension: string): boolean {
   return (PREVIEW_EXTENSIONS as readonly string[]).includes(extension)
+}
+
+// The same preview rules as the catalogue, so a wrong image never leaves the browser.
+export function previewProblem(file: File): string | undefined {
+  if (!isAllowedPreviewExtension(fileExtension(file.name))) return 'The preview must be a png, jpg, jpeg or webp image.'
+  if (file.size > MAX_PREVIEW_BYTES) return 'The preview is larger than 2 MB.'
+  return undefined
 }
 
 // Mirrors AssetView in backend/src/views/asset.view.ts
@@ -53,7 +62,7 @@ type AssetListResponse = {
 // Keep the UI's one-based page model while translating the backend's zero-based API.
 export type AssetPage = { items: Asset[]; page: number; pageSize: number; total: number }
 
-export type NewAsset = { name: string; description: string; type: AssetType; file: File; tags?: string[] }
+export type NewAsset = { name: string; description: string; type: AssetType; file: File; preview: File; tags?: string[] }
 
 // The catalog API refuses a longer name search (400).
 export const SEARCH_MAX_LENGTH = 100
@@ -94,6 +103,7 @@ export function uploadAsset(asset: NewAsset): Promise<Asset> {
   form.append('description', asset.description)
   form.append('type', asset.type)
   for (const tag of asset.tags ?? []) form.append('tagList', tag)
+  form.append('preview', asset.preview)
   form.append('file', asset.file)
   return apiPostForm<Asset>('/assets', form)
 }
@@ -106,8 +116,17 @@ export function getAsset(id: string, signal?: AbortSignal): Promise<Asset> {
 // confirmed was created by TagInput before (US-1.1).
 export type AssetChanges = { name: string; description: string; tagList: string[] }
 
-export function updateAsset(id: string, changes: AssetChanges): Promise<Asset> {
-  return apiPut<Asset>(`/assets/${encodeURIComponent(id)}`, changes)
+// With a new preview image the same fields go as multipart/form-data (AM asset/update preview); tagList is then one
+// field with a JSON array, so an empty list still clears the tags.
+export function updateAsset(id: string, changes: AssetChanges, preview: File | null = null): Promise<Asset> {
+  const path = `/assets/${encodeURIComponent(id)}`
+  if (!preview) return apiPut<Asset>(path, changes)
+  const form = new FormData()
+  form.append('name', changes.name)
+  form.append('description', changes.description)
+  form.append('tagList', JSON.stringify(changes.tagList))
+  form.append('preview', preview)
+  return apiPutForm<Asset>(path, form)
 }
 
 export function deleteAsset(id: string): Promise<void> {
