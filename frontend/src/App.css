@@ -258,11 +258,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .report-reason span { display: flex; flex-direction: column; gap: 2px; }
 .report-reason strong { color: #111; font-size: 13px; }
 .report-reason small { color: #777; font-size: 11px; }
-.report-comment { display: block; margin-bottom: 6px; color: #222; font-size: 12px; font-weight: 600; }
-.report-comment span { color: #888; font-weight: 400; }
 .report-dialog textarea { width: 100%; padding: 9px 11px; font: inherit; color: #111; border: 1px solid #e0e0e0; border-radius: 6px; resize: vertical; font-size: 13px; }
 .report-dialog textarea:focus { border-color: #3355e0; outline: none; }
-.confirm-dialog .report-count { margin-top: 4px; color: #999; font-size: 10px; text-align: right; }
 .confirm-dialog .button:disabled { opacity: .55; cursor: default; }
 
 /* Admin: reports */

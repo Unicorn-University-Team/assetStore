@@ -948,10 +948,10 @@
                 "reports"
               ]
             },
-            "description": "Report the asset in assetId (Assets → List sets it). Needs Login. reason: inappropriateContent | copyright | spam | brokenFile | other; comment at most 500 characters. Own asset 403, second open report 409.",
+            "description": "Report the asset in assetId (Assets → List sets it). Needs Login. reason: inappropriateContent | copyright | spam | brokenFile | other (no comment, AM report/create). Own asset 403, second open report 409.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"reason\": \"spam\",\n  \"comment\": \"\"\n}"
+              "raw": "{\n  \"reason\": \"spam\"\n}"
             }
           },
           "event": [
@@ -1046,12 +1046,12 @@
           ]
         },
         {
-          "name": "Reject (admin)",
+          "name": "Deny (admin)",
           "request": {
             "method": "POST",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/reports/{{reportId}}/reject",
+              "raw": "{{baseUrl}}/api/reports/{{reportId}}/deny",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -1059,7 +1059,7 @@
                 "api",
                 "reports",
                 "{{reportId}}",
-                "reject"
+                "deny"
               ]
             },
             "description": "US-7: open → rejected. A report that is not open any more answers 409."

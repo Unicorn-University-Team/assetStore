@@ -380,10 +380,10 @@ při čtení doptají identity přes `/internal` (viz [Komunikace mezi službami
 
 | Metoda | Cesta | Kdo | Co dělá |
 |---|---|---|---|
-| `POST` | `/api/assets/:id/reports` | přihlášený | US-5: `{ reason, comment? }` → **201** report; zablokovaný uživatel (`SUSPENDED`) → **403** |
+| `POST` | `/api/assets/:id/reports` | přihlášený | US-5: `{ reason }` → **201** report; zablokovaný uživatel (`SUSPENDED`) → **403** |
 | `GET` | `/api/reports?status=&assetOwnerId=&pageIndex=&pageSize=` | admin | seznam od nejnovějších; `status` `open` (výchozí), `resolved`, `rejected` nebo `all`; `assetOwnerId` (nepovinné, UUID) = jen reporty na assety tohoto vlastníka; stránky jako u assetů: `{ itemList, pageInfo }` |
 | `GET` | `/api/reports/:id` | admin | jeden report |
-| `POST` | `/api/reports/:id/reject` | admin | US-7: zamítnutí, `open` → `rejected`, zapíše `reportRejected` do audit logu |
+| `POST` | `/api/reports/:id/deny` | admin | US-7 (AM `report/deny`): zamítnutí, `open` → `rejected`, zapíše `reportRejected` do audit logu |
 
 - **Důvody** (`reason`, podle AM): `inappropriateContent`, `copyright`, `spam`, `brokenFile`, `other`. `comment` je
   nepovinný, nejvýš 500 znaků. Stejný seznam je ve frontendu (`frontend/src/api/reports.ts`) a jako CHECK v databázi.
