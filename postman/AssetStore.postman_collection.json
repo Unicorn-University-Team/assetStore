@@ -31,6 +31,10 @@
     {
       "key": "collectionId",
       "value": ""
+    },
+    {
+      "key": "userId",
+      "value": ""
     }
   ],
   "item": [
@@ -228,7 +232,8 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200 && pm.response.json().user) pm.collectionVariables.set('userId', pm.response.json().user.id);"
                 ]
               }
             }
@@ -398,27 +403,28 @@
           "request": {
             "method": "GET",
             "header": [],
-            "description": "US-1 My assets: only the logged-in user's assets, newest first. Needs Login, otherwise 401.",
+            "description": "US-1 My assets = asset/list with ownerId (AM). Run Auth / Me first: it stores userId.",
             "url": {
-              "raw": "{{baseUrl}}/api/assets/my?pageIndex=0&pageSize=20",
+              "raw": "{{baseUrl}}/api/assets?ownerId={{userId}}&pageIndex=0&pageSize=20",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "assets",
-                "my"
+                "assets"
               ],
               "query": [
                 {
+                  "key": "ownerId",
+                  "value": "{{userId}}"
+                },
+                {
                   "key": "pageIndex",
-                  "value": "0",
-                  "description": "Page from 0"
+                  "value": "0"
                 },
                 {
                   "key": "pageSize",
-                  "value": "20",
-                  "description": "1 to 100, default 20"
+                  "value": "20"
                 }
               ]
             }
@@ -474,13 +480,19 @@
                   "key": "tagList",
                   "value": "medieval",
                   "type": "text",
-                  "description": "Optional; one field per tag (max 10), lower-cased; a missing tag is created. Wrong name → 400"
+                  "description": "Optional; one field per tag (max 10), lower-cased; every tag must exist (Tags / Create), else 400"
                 },
                 {
                   "key": "tagList",
                   "value": "Low-Poly",
                   "type": "text",
                   "description": "Second tag (saved as low-poly)"
+                },
+                {
+                  "key": "preview",
+                  "type": "file",
+                  "src": [],
+                  "description": "Required (AM): png, jpg, jpeg or webp, at most 2 MB"
                 },
                 {
                   "key": "file",
@@ -665,6 +677,33 @@
               ]
             },
             "description": "At most 10 tags starting with the prefix, sorted by name."
+          }
+        },
+        {
+          "name": "Create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "US-1.1, AM tag/create: needs Login. Name is trimmed and lower-cased; 201 { id, name }, invalid name 400, existing name 409. Assets take only existing tags.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"low-poly\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tags",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tags"
+              ]
+            }
           }
         }
       ]

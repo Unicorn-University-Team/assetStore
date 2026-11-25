@@ -6,8 +6,14 @@ import { CommunityClient } from '../clients/community.client';
 import { IdentityClient } from '../clients/identity.client';
 import { FileStorage } from '../storage/file-storage';
 import { HttpError } from '@assetstore/shared';
-import { parseRange, previewContentType } from '../utils/preview';
-import { receiveUpload } from '../utils/receiveUpload';
+import {
+  PREVIEW_EXTENSIONS,
+  PREVIEW_IMAGE_TYPES,
+  PREVIEW_MAX_BYTES,
+  parseRange,
+  previewContentType,
+} from '../utils/preview';
+import { receiveUpload, removeUploaded, type FileRule } from '../utils/receiveUpload';
 import { MAX_TAGS_PER_ASSET, normalizeTagList, tagListFromForm } from '../utils/tags';
 import { toAssetView } from '../views/asset.view';
 
@@ -96,6 +102,32 @@ async function openFile(asset: Asset, range?: { start: number; end: number }) {
   });
 }
 
+// AM asset limits: the asset file (asset/create) and the preview image (asset/create, asset/update).
+const FILE_RULE: FileRule = {
+  maxBytes: env.maxUploadMb * 1024 * 1024,
+  allowedExtensions: ALLOWED_EXTENSIONS,
+  keyPrefix: 'assets/',
+  wrongType: (extension) => `Files of type ".${extension}" are not allowed`,
+  tooLarge: `The file is larger than ${env.maxUploadMb} MB`,
+};
+const PREVIEW_RULE: FileRule = {
+  maxBytes: PREVIEW_MAX_BYTES,
+  allowedExtensions: PREVIEW_EXTENSIONS,
+  keyPrefix: 'previews/',
+  wrongType: (extension) => `A preview of type ".${extension}" is not allowed: use png, jpg, jpeg or webp`,
+  tooLarge: 'The preview is larger than 2 MB',
+  contentType: (extension) => PREVIEW_IMAGE_TYPES[extension] ?? 'application/octet-stream',
+};
+
+// A preview that is the asset file itself (assets from before previews, migration asset_preview) is never deleted
+// on its own: the file would go with it.
+async function removePreview(asset: Pick<Asset, 'fileKey' | 'previewKey'>): Promise<void> {
+  if (!asset.previewKey || asset.previewKey === asset.fileKey) return;
+  await FileStorage.remove(asset.previewKey).catch((error: unknown) => {
+    console.error(`Could not delete ${asset.previewKey} from S3`, error);
+  });
+}
+
 function readActor(res: Response): Actor {
   return { id: res.locals.userId as string, role: res.locals.role as Actor['role'] };
 }
@@ -112,21 +144,6 @@ export const AssetController = {
     // One call per service for the whole page, at the same time.
     const [ownerNames, ratings] = await Promise.all([
       IdentityClient.usernames(items.map((asset) => asset.ownerId)),
-      CommunityClient.ratings(items.map((asset) => asset.id)),
-    ]);
-    res.json({ itemList: items.map((asset) => toAssetView(asset, ownerNames, ratings)), pageInfo: { pageIndex, pageSize, total } });
-  },
-
-  // GET /api/assets/my (AM asset/listMy, US-1 "My assets"): only the logged-in user's assets, newest first, the same
-  // paging as asset/list. The owner always comes from the token, never from the request.
-  async listMy(req: Request, res: Response) {
-    const actor = readActor(res);
-    const pageIndex = readInteger('pageIndex', req.query.pageIndex, 0, null, 0);
-    const pageSize = readInteger('pageSize', req.query.pageSize, 1, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE);
-    const { items, total } = await AssetModel.findPage({ name: '', ownerId: actor.id, tagNames: [], pageIndex, pageSize });
-
-    const [ownerNames, ratings] = await Promise.all([
-      IdentityClient.usernames([actor.id]),
       CommunityClient.ratings(items.map((asset) => asset.id)),
     ]);
     res.json({ itemList: items.map((asset) => toAssetView(asset, ownerNames, ratings)), pageInfo: { pageIndex, pageSize, total } });
@@ -153,14 +170,13 @@ export const AssetController = {
     // Refuse before reading the body when the storage is already full.
     if ((await AssetModel.totalFileSize()) >= STORAGE_LIMIT_BYTES) throw storageFull();
 
-    const { fields, fieldLists, file } = await receiveUpload(req, {
-      fileField: 'file',
-      maxBytes: env.maxUploadMb * 1024 * 1024,
-      allowedExtensions: ALLOWED_EXTENSIONS,
-    });
-    if (!file) throw new HttpError(400, '"file" is required');
+    const { fields, fieldLists, files } = await receiveUpload(req, { files: { file: FILE_RULE, preview: PREVIEW_RULE } });
+    const { file, preview } = files;
 
     try {
+      if (!file) throw new HttpError(400, '"file" is required');
+      // AM asset/create: the preview image is required.
+      if (!preview) throw new HttpError(400, '"preview" is required: a png, jpg, jpeg or webp image of at most 2 MB');
       if ((await AssetModel.totalFileSize()) + file.size > STORAGE_LIMIT_BYTES) throw storageFull();
       const input = {
         name: readName(fields.name),
@@ -170,29 +186,50 @@ export const AssetController = {
         fileName: file.fileName,
         fileSize: file.size,
         contentType: file.contentType,
+        previewKey: preview.key,
+        previewContentType: preview.contentType,
       };
       const tagNames = normalizeTagList(tagListFromForm(fieldLists.tagList));
       const asset = await AssetModel.create(input, tagNames, actor);
       res.status(201).json(toAssetView(asset, await IdentityClient.usernames([asset.ownerId])));
     } catch (error) {
-      await FileStorage.remove(file.key).catch(() => undefined);
+      await removeUploaded(files);
       throw error;
     }
   },
 
-  // JSON: name, description (optional), tagList (optional). The file itself is not replaced.
+  // JSON { name, description?, tagList? }, or multipart/form-data with the same fields and an optional new
+  // "preview" image (AM asset/update). The type and the file itself are not replaced.
   async update(req: Request<IdParams>, res: Response) {
     const actor = readActor(res);
-    const body = (req.body ?? {}) as { name?: unknown; description?: unknown; tagList?: unknown };
-    // AM asset/update: a field that is not sent stays unchanged (before, a missing description emptied it).
-    const input = {
-      name: readName(body.name),
-      ...(body.description === undefined ? {} : { description: readDescription(body.description) }),
-    };
-    // AM asset/update: tagList replaces the tags; without it the tags stay unchanged.
-    const tagNames = body.tagList === undefined ? null : normalizeTagList(body.tagList);
-    const asset = UUID.test(req.params.id) ? await AssetModel.update(req.params.id, input, actor, tagNames) : null;
-    if (!asset) throw new HttpError(404, 'Asset not found');
+    const multipart = Boolean(req.is('multipart/form-data'));
+    const upload = multipart ? await receiveUpload(req, { files: { preview: PREVIEW_RULE } }) : null;
+    const preview = upload?.files.preview;
+    const body = upload
+      ? { name: upload.fields.name, description: upload.fields.description, tagList: tagListFromForm(upload.fieldLists.tagList) }
+      : ((req.body ?? {}) as { name?: unknown; description?: unknown; tagList?: unknown });
+
+    let result: Awaited<ReturnType<typeof AssetModel.update>>;
+    try {
+      // AM asset/update: a field that is not sent stays unchanged (before, a missing description emptied it).
+      const input = {
+        name: readName(body.name),
+        ...(body.description === undefined ? {} : { description: readDescription(body.description) }),
+        ...(preview ? { previewKey: preview.key, previewContentType: preview.contentType } : {}),
+      };
+      // AM asset/update: tagList replaces the tags; without it the tags stay unchanged. In a form, no tagList field
+      // means no change as well.
+      const tagNames = body.tagList === undefined ? null : normalizeTagList(body.tagList);
+      result = UUID.test(req.params.id) ? await AssetModel.update(req.params.id, input, actor, tagNames) : null;
+      if (!result) throw new HttpError(404, 'Asset not found');
+    } catch (error) {
+      // AM asset/update steps 7 and 8: nothing saved, so the new preview goes again.
+      if (upload) await removeUploaded(upload.files);
+      throw error;
+    }
+    const { before, after: asset } = result;
+    // The new preview is saved; the old one is not needed any more.
+    if (preview) await removePreview(before);
 
     const [ownerNames, ratings] = await Promise.all([
       IdentityClient.usernames([asset.ownerId]),
@@ -206,10 +243,12 @@ export const AssetController = {
     const asset = UUID.test(req.params.id) ? await AssetModel.remove(req.params.id, actor) : null;
     if (!asset) throw new HttpError(404, 'Asset not found');
 
-    // The database row is gone already; a leftover file only costs storage, so log and carry on.
+    // The database row is gone already; a leftover file only costs storage, so log and carry on (AM asset/delete
+    // step 6: the file and the preview).
     await FileStorage.remove(asset.fileKey).catch((error: unknown) => {
       console.error(`Could not delete ${asset.fileKey} from S3`, error);
     });
+    await removePreview(asset);
     res.status(204).end();
   },
 
@@ -226,6 +265,30 @@ export const AssetController = {
     await AssetModel.incrementDownloads(asset.id).catch((error: unknown) => {
       console.error(`Could not count the download of ${asset.id}`, error);
     });
+  },
+
+  // AM asset/preview, GET /api/assets/:id/preview: the preview image from the private bucket, with its stored
+  // content type. The download count does not change. The ETag is the S3 key, which changes with a new preview, so
+  // the browser asks again (no-cache) but gets a 304 while the picture is the same.
+  async previewImage(req: Request<IdParams>, res: Response) {
+    const asset = await findAsset(req.params.id);
+    if (!asset.previewKey) throw new HttpError(404, 'This asset has no preview');
+    const etag = `"${asset.previewKey}"`;
+    res.setHeader('ETag', etag);
+    res.setHeader('Cache-Control', 'private, no-cache');
+    if (req.headers['if-none-match'] === etag) {
+      res.status(304).end();
+      return;
+    }
+    const body = await FileStorage.download(asset.previewKey).catch((error: unknown) => {
+      console.error(error);
+      throw new HttpError(502, 'Could not read the preview'); // AM previewReadFailed
+    });
+    res.setHeader('Content-Type', asset.previewContentType ?? 'application/octet-stream');
+    res.setHeader('Content-Disposition', 'inline');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+    await pipeline(body, res);
   },
 
   // GET /api/assets/:id/file: the file for the preview on the asset page (README "Náhled"). Shown in the browser,

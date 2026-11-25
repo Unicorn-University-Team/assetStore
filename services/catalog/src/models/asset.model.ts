@@ -26,9 +26,13 @@ export const ALLOWED_EXTENSIONS: ReadonlySet<string> = new Set([
   'zip', '7z', 'unitypackage', 'tmx',
 ]);
 
-export type AssetInput = Pick<Asset, 'name' | 'description' | 'type' | 'fileKey' | 'fileName' | 'fileSize' | 'contentType'>;
+export type AssetInput = Pick<
+  Asset,
+  'name' | 'description' | 'type' | 'fileKey' | 'fileName' | 'fileSize' | 'contentType' | 'previewKey' | 'previewContentType'
+>;
 // description is optional: when it is not sent, it stays as it is.
-export type AssetUpdate = Pick<Asset, 'name'> & Partial<Pick<Asset, 'description'>>;
+// previewKey and previewContentType only with a new preview (AM asset/update step 7).
+export type AssetUpdate = Pick<Asset, 'name'> & Partial<Pick<Asset, 'description' | 'previewKey' | 'previewContentType'>>;
 
 export type Actor = { id: string; role: 'USER' | 'ADMIN' };
 
@@ -94,14 +98,14 @@ export const AssetModel = {
   // US-1.1: links the asset to exactly these tags (normalized names, see normalizeTagList); missing tags are created.
   // In the caller's transaction, so a failure undoes the asset change too. Shared by create and, later, edit (US-2).
   async setTags(tx: Prisma.TransactionClient, assetId: string, names: string[]): Promise<void> {
-    const tags = await TagModel.findOrCreate(tx, names);
+    const tags = await TagModel.findExisting(tx, names);
     await tx.assetTag.deleteMany({ where: { assetId, tagId: { notIn: tags.map((tag) => tag.id) } } });
     await tx.assetTag.createMany({ data: tags.map((tag) => ({ assetId, tagId: tag.id })), skipDuplicates: true });
   },
 
   // Creating, updating and deleting write an audit log entry in the same transaction:
   // if the entry cannot be written, the change is undone (README, Audit log, rule 1).
-  // The asset, its tags (new ones created) and the audit entry are saved together or not at all (US-1.1).
+  // The asset, its tags (all must exist, AM tagDoesNotExist) and the audit entry are saved together or not at all.
   create(input: AssetInput, tagNames: string[], actor: Actor): Promise<AssetWithTags> {
     return prisma.$transaction(async (tx) => {
       const asset = await tx.asset.create({ data: { ...input, ownerId: actor.id } });
@@ -118,7 +122,13 @@ export const AssetModel = {
 
   // An update that changes nothing is not logged.
   // tagNames null = the tags stay as they are (a request without tagList).
-  update(id: string, input: AssetUpdate, actor: Actor, tagNames: string[] | null = null): Promise<AssetWithTags | null> {
+  // Returns the asset before and after: the caller deletes the replaced preview from S3 once all is saved.
+  update(
+    id: string,
+    input: AssetUpdate,
+    actor: Actor,
+    tagNames: string[] | null = null,
+  ): Promise<{ before: AssetWithTags; after: AssetWithTags } | null> {
     return prisma.$transaction(async (tx) => {
       const before = await tx.asset.findUnique({ where: { id }, include: withTags });
       if (!before) return null;
@@ -128,7 +138,7 @@ export const AssetModel = {
       const { count } = await tx.asset.updateMany({ where: { id }, data: input });
       if (count === 0) return null;
 
-      // US-2: the tags are replaced like at publishing; a missing tag is created (US-1.1), names in lower case.
+      // US-2: the tags are replaced like at publishing; every tag must exist (AM asset/update step 6).
       if (tagNames !== null) await AssetModel.setTags(tx, id, tagNames);
 
       const after = await tx.asset.findUniqueOrThrow({ where: { id }, include: withTags });
@@ -145,7 +155,7 @@ export const AssetModel = {
           actorId: actor.id,
         });
       }
-      return after;
+      return { before, after };
     });
   },
 
