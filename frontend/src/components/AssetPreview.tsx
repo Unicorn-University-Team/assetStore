@@ -87,6 +87,10 @@ export default function AssetPreview({ asset, fallback }: { asset: Asset; fallba
   const [failed, setFailed] = useState(false)
   const kind = previewKind(asset.fileName)
 
+  // AM AssetPreviewImage: the preview image (previewUrl). 3D models and sounds keep their viewer and player.
+  if (kind !== 'model' && kind !== 'audio' && asset.previewUrl && !failed) {
+    return <img className="detail-preview" src={asset.previewUrl} alt={`${asset.name} preview`} onError={() => setFailed(true)} />
+  }
   if (kind === 'image' && !failed) {
     return <img className="detail-preview" src={fileUrl(asset)} alt={`${asset.name} preview`} onError={() => setFailed(true)} />
   }

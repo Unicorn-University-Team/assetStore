@@ -29,7 +29,7 @@ export default function MyAssetsPage() {
   useEffect(() => {
     if (!ownerId) return
     const controller = new AbortController()
-    listMyAssets(page, controller.signal)
+    listMyAssets(ownerId, page, controller.signal)
       .then((result) => setLoaded({ request, result, error: '' }))
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useImperativeHandle, useRef, useState, type KeyboardEvent, type Ref } from 'react'
-import { listTags, type Tag } from '../api/tags'
+import { createTag, listTags, type Tag } from '../api/tags'
 
 const TAG_NAME = /^[a-z0-9-]{1,50}$/
 const MAX_TAGS = 10
@@ -53,7 +53,7 @@ export default function TagInput({ ref, id, tags, onChange, onError, error, disa
   const options: Option[] = offerCreate ? [...visible, { id: 'create', name: typed, create: true }] : visible
   const highlighted = options[Math.min(active, Math.max(options.length - 1, 0))]
 
-  // confirmed = the user chose "Create tag": the tag goes on the asset and the catalogue creates it on publish.
+  // confirmed = the user chose "Create tag": the tag is created right away (AM tag/create), then goes on the asset.
   // Without it, a tag that does not exist is not added (US-1.1, the user did not confirm).
   const addName = useCallback(async (raw: string, current: string[], confirmed = false) => {
     const name = normalizeTag(raw)
@@ -73,6 +73,7 @@ export default function TagInput({ ref, id, tags, onChange, onError, error, disa
       return { tags: current, error: message }
     }
     try {
+      if (confirmed) await createTag(name)
       const found = confirmed ? [] : await listTags(name)
       if (!confirmed && !found.some((tag) => tag.name === name)) {
         const message = `The tag “${name}” does not exist yet. Choose “Create tag” to add it.`
@@ -81,7 +82,7 @@ export default function TagInput({ ref, id, tags, onChange, onError, error, disa
         return { tags: current, error: message }
       }
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : 'Could not look up tags.'
+      const message = cause instanceof Error ? cause.message : confirmed ? 'Could not create the tag.' : 'Could not look up tags.'
       onError(message)
       return { tags: current, error: message }
     }
