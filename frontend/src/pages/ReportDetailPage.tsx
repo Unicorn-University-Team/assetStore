@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError, describeFailure } from '../api/client'
-import { getReport, reasonLabel, rejectReport, type Report } from '../api/reports'
+import { denyReport, getReport, reasonLabel, type Report } from '../api/reports'
 import ConfirmDialog from '../components/ConfirmDialog'
 import InlineError from '../components/InlineError'
 import StatusMessage from '../components/StatusMessage'
@@ -45,7 +45,7 @@ export default function ReportDetailPage() {
     setBusy(true)
     setActionError('')
     try {
-      await rejectReport(id)
+      await denyReport(id)
       // Back to the open reports, where this one is no longer listed.
       navigate('/admin/reports', { state: { notice: 'Report denied. It is now in the rejected reports.' } })
     } catch (cause) {
@@ -99,17 +99,18 @@ export default function ReportDetailPage() {
       <dl className="report-facts">
         <div>
           <dt>Asset</dt>
-          <dd>{report.assetName ? <Link to={`/assets/${encodeURIComponent(report.assetId)}`}>{report.assetName}</Link> : 'Deleted from the catalogue'}</dd>
+          <dd>{report.assetId && report.assetName
+            ? <Link to={`/assets/${encodeURIComponent(report.assetId)}`}>{report.assetName}</Link>
+            : `${report.assetName ? `${report.assetName}, d` : 'D'}eleted from the catalogue`}</dd>
         </div>
         <div><dt>Owner</dt><dd>{report.assetOwnerName ?? 'Unknown'}</dd></div>
         <div><dt>Reported by</dt><dd>{report.authorName ?? 'Unknown'}</dd></div>
         <div><dt>Reason</dt><dd>{reasonLabel(report.reason)}</dd></div>
-        <div><dt>Comment</dt><dd>{report.comment || <span className="muted">No comment</span>}</dd></div>
         <div><dt>Reported on</dt><dd>{formatDateTime(report.createdAt)}</dd></div>
         {report.status !== 'open' && (
           <div>
             <dt>{report.status === 'rejected' ? 'Denied' : 'Resolved'}</dt>
-            <dd>{report.decidedAt ? formatDateTime(report.decidedAt) : '—'}{report.decidedByName ? ` by ${report.decidedByName}` : ''}</dd>
+            <dd>{report.decidedAt ? formatDateTime(report.decidedAt) : '—'}</dd>
           </div>
         )}
       </dl>
