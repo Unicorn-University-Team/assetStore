@@ -1,6 +1,6 @@
 import type { AssetRating } from '../clients/community.client';
 import type { Asset, AssetWithTags } from '../models/asset.model';
-import { cardPreviewUrl } from '../utils/preview';
+import { previewUrlOf } from '../utils/preview';
 
 // What the client sees (AM asset/list dtoOut item). The S3 key (fileKey) is internal and never leaves the backend.
 export interface AssetView {
@@ -41,8 +41,8 @@ export function toAssetView(
     tagList: 'tags' in asset ? asset.tags.map((link) => link.tag.name).sort() : [],
     fileName: asset.fileName,
     fileSize: asset.fileSize,
-    // Small images are their own preview (GET /api/assets/:id/file); other types have none yet.
-    previewUrl: cardPreviewUrl(asset),
+    // AM: the preview image of the asset (GET /api/assets/:id/preview).
+    previewUrl: previewUrlOf(asset),
     downloadCount: asset.downloadCount,
     averageRating: rating?.averageRating ?? null,
     reviewCount: rating?.reviewCount ?? 0,

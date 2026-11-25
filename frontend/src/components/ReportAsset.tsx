@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ApiError } from '../api/client'
-import { REPORT_COMMENT_MAX, REPORT_REASONS, createReport, reasonLabel, type ReportReason } from '../api/reports'
+import { REPORT_REASONS, createReport, reasonLabel, type ReportReason } from '../api/reports'
 import { useAuth } from '../auth/auth-context'
 import ConfirmDialog from './ConfirmDialog'
 import InlineError from './InlineError'
@@ -11,16 +11,14 @@ type Step = 'idle' | 'choosing' | 'confirming' | 'sending' | 'sent' | 'already'
 
 type ReasonDialogProps = {
   reason: ReportReason | ''
-  comment: string
   error: string
   onReason: (reason: ReportReason) => void
-  onComment: (comment: string) => void
   onCancel: () => void
   onContinue: () => void
 }
 
-// Step 1: the reason (required) and an optional comment.
-function ReasonDialog({ reason, comment, error, onReason, onComment, onCancel, onContinue }: ReasonDialogProps) {
+// Step 1: the reason (required; AM report/create has no comment).
+function ReasonDialog({ reason, error, onReason, onCancel, onContinue }: ReasonDialogProps) {
   const id = useId()
   const dialog = useRef<HTMLElement>(null)
   const firstReason = useRef<HTMLInputElement>(null)
@@ -62,18 +60,6 @@ function ReasonDialog({ reason, comment, error, onReason, onComment, onCancel, o
               </label>
             ))}
           </fieldset>
-          <label className="report-comment" htmlFor={`${id}-comment`}>
-            Comment <span>(optional)</span>
-          </label>
-          <textarea
-            id={`${id}-comment`}
-            value={comment}
-            maxLength={REPORT_COMMENT_MAX}
-            rows={3}
-            placeholder="What should the admin look at?"
-            onChange={(event) => onComment(event.target.value)}
-          />
-          <p className="report-count">{comment.length} / {REPORT_COMMENT_MAX}</p>
           {error && <InlineError message={error} />}
           <div className="dialog-actions">
             <button type="button" className="button button-secondary" onClick={onCancel}>Cancel</button>
@@ -92,7 +78,6 @@ export default function ReportAsset({ assetId, assetName, ownerId }: { assetId: 
   const location = useLocation()
   const [step, setStep] = useState<Step>('idle')
   const [reason, setReason] = useState<ReportReason | ''>('')
-  const [comment, setComment] = useState('')
   const [error, setError] = useState('')
 
   const close = useCallback(() => {
@@ -119,7 +104,7 @@ export default function ReportAsset({ assetId, assetName, ownerId }: { assetId: 
     if (!reason || step === 'sending') return
     setStep('sending')
     try {
-      await createReport(assetId, reason, comment.trim())
+      await createReport(assetId, reason)
       setStep('sent')
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 409) {
@@ -137,10 +122,8 @@ export default function ReportAsset({ assetId, assetName, ownerId }: { assetId: 
       {step === 'choosing' && (
         <ReasonDialog
           reason={reason}
-          comment={comment}
           error={error}
           onReason={(next) => { setReason(next); setError('') }}
-          onComment={setComment}
           onCancel={close}
           onContinue={() => setStep('confirming')}
         />

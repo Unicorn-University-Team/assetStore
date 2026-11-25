@@ -15,10 +15,9 @@ export type ReportStatus = (typeof REPORT_STATUSES)[number];
 export type ReportInput = {
   assetId: string;
   assetName: string;
-  assetOwnerId: string | null;
+  assetOwnerId: string;
   authorId: string;
   reason: ReportReason;
-  comment: string;
 };
 
 export const ReportModel = {
@@ -35,9 +34,17 @@ export const ReportModel = {
     }
   },
 
-  // Newest first; id breaks ties so that paging never repeats or skips a report. status null = all.
-  async findPage(options: { status: ReportStatus | null; pageIndex: number; pageSize: number }) {
-    const where = options.status ? { status: options.status } : {};
+  // Newest first; id breaks ties so that paging never repeats or skips a report. status null = all statuses;
+  // assetOwnerId null = reports on anyone's assets (no condition, not IS NULL).
+  async findPage(options: {
+    status: ReportStatus | null;
+    assetOwnerId: string | null;
+    pageIndex: number;
+    pageSize: number;
+  }) {
+    const where: Prisma.ReportWhereInput = {};
+    if (options.status) where.status = options.status;
+    if (options.assetOwnerId) where.assetOwnerId = options.assetOwnerId;
     const [items, total] = await prisma.$transaction([
       prisma.report.findMany({
         where,
@@ -61,7 +68,7 @@ export const ReportModel = {
       // Only an open report changes; a report decided in the meantime is a 409, not a second decision.
       const { count } = await tx.report.updateMany({
         where: { id, status: 'open' },
-        data: { status: 'rejected', decidedBy: adminId, decidedAt: new Date() },
+        data: { status: 'rejected', decidedById: adminId, decidedAt: new Date() },
       });
       const report = await tx.report.findUnique({ where: { id } });
       if (!report) return null;

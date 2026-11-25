@@ -6,3 +6,5 @@ import { InternalController } from "../controllers/internal.controller";
 export const internalRoutes = Router();
 
 internalRoutes.get("/users", InternalController.usernames);
+internalRoutes.post("/users/:id/violations", InternalController.addViolation);
+internalRoutes.post("/users/:id/violations/:reportId/remove", InternalController.removeViolation);

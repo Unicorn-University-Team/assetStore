@@ -4,18 +4,14 @@ import type { Report } from '../models/report.model';
 // come from identity and are null when the user no longer exists or identity did not answer.
 export interface ReportView {
   id: string;
-  assetId: string;
+  assetId: string | null;
   assetName: string;
   assetOwnerId: string | null;
-  assetOwnerName: string | null;
   authorId: string;
-  authorName: string | null;
   reason: string;
-  comment: string;
   status: string;
   createdAt: string;
   decidedById: string | null;
-  decidedByName: string | null;
   decidedAt: string | null;
 }
 
@@ -35,15 +31,11 @@ export function toReportView(report: Report, names: ReportNames = NO_NAMES): Rep
     assetId: report.assetId,
     assetName: report.assetName,
     assetOwnerId: report.assetOwnerId,
-    assetOwnerName: userName(names, report.assetOwnerId),
     authorId: report.authorId,
-    authorName: userName(names, report.authorId),
     reason: report.reason,
-    comment: report.comment,
     status: report.status,
     createdAt: report.createdAt.toISOString(),
-    decidedById: report.decidedBy,
-    decidedByName: userName(names, report.decidedBy),
     decidedAt: report.decidedAt?.toISOString() ?? null,
+    decidedById: report.decidedById,
   };
 }

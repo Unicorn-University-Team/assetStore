@@ -16,7 +16,9 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "test": "npm run typecheck:tests && vitest run --config ../../vitest.config.mts services/identity/test",
+    "typecheck:tests": "tsc --project tsconfig.test.json"
   },
   "dependencies": {
     "@assetstore/shared": "*",

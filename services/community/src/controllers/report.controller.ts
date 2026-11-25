@@ -22,13 +22,6 @@ function readReason(value: unknown): ReportReason {
   return reason;
 }
 
-function readComment(value: unknown): string {
-  if (value === undefined || value === null) return '';
-  if (typeof value !== 'string') throw new HttpError(400, '"comment" must be a string');
-  if (value.trim().length > 500) throw new HttpError(400, '"comment" must be at most 500 characters');
-  return value.trim();
-}
-
 // report/list filter: open (default), resolved, rejected or all.
 function readStatus(value: unknown): ReportStatus | null {
   if (value === undefined) return 'open';
@@ -36,6 +29,14 @@ function readStatus(value: unknown): ReportStatus | null {
   const status = REPORT_STATUSES.find((item) => item === value);
   if (!status) throw new HttpError(400, `"status" must be one of: ${REPORT_STATUSES.join(', ')}, all`);
   return status;
+}
+
+// report/list filter: reports on the assets of this owner. Not given = everyone's assets (null).
+function readAssetOwnerId(value: unknown): string | null {
+  if (value === undefined) return null;
+  // A repeated parameter arrives as an array, so only a single string is accepted.
+  if (typeof value !== 'string' || !UUID.test(value)) throw new HttpError(400, '"assetOwnerId" must be a uuid');
+  return value.toLowerCase();
 }
 
 // Whole number from the query string. max = null means no upper limit.
@@ -59,7 +60,7 @@ async function findReport(id: string): Promise<Report> {
 // User names from identity, one call for all the reports. The asset name is stored in the report itself.
 async function namesFor(reports: Report[]): Promise<ReportNames> {
   const users = await IdentityClient.usernames(
-    reports.flatMap((report) => [report.authorId, report.assetOwnerId, report.decidedBy]),
+    reports.flatMap((report) => [report.authorId, report.assetOwnerId, report.decidedById]),
   );
   return { users };
 }
@@ -68,13 +69,15 @@ export const ReportController = {
   // US-5, POST /api/assets/:assetId/reports: { reason, comment? }. Any logged-in user except the asset's owner.
   async create(req: Request<{ assetId: string }>, res: Response) {
     const authorId: string = res.locals.userId;
-    const body = (req.body ?? {}) as { reason?: unknown; comment?: unknown };
+    const body = (req.body ?? {}) as { reason?: unknown };
     const reason = readReason(body.reason);
-    const comment = readComment(body.comment);
 
     const assetId = req.params.assetId.toLowerCase();
     const asset = UUID.test(assetId) ? (await CatalogClient.assetSummaries([assetId])).get(assetId) : undefined;
     if (!asset) throw new HttpError(404, 'Asset not found');
+    if (asset.ownerId === null) {
+    throw new HttpError(409, 'Cannot report an asset without an owner');
+  }
     // AM report/create step 3, BM User account BR-03: a suspended user cannot report an asset.
     if ((await IdentityClient.status(authorId)) === 'SUSPENDED') {
       throw new HttpError(403, 'A suspended user cannot report an asset');
@@ -87,17 +90,18 @@ export const ReportController = {
       assetOwnerId: asset.ownerId,
       authorId,
       reason,
-      comment,
     });
     res.status(201).json(toReportView(report));
   },
 
-  // GET /api/reports?status=&pageIndex=&pageSize= (admin): newest first, open ones by default.
+  // GET /api/reports?status=&assetOwnerId=&pageIndex=&pageSize= (admin): newest first, open ones by default;
+  // with assetOwnerId only the reports on that user's assets.
   async list(req: Request, res: Response) {
     const status = readStatus(req.query.status);
+    const assetOwnerId = readAssetOwnerId(req.query.assetOwnerId);
     const pageIndex = readInteger('pageIndex', req.query.pageIndex, 0, null, 0);
     const pageSize = readInteger('pageSize', req.query.pageSize, 1, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE);
-    const { items, total } = await ReportModel.findPage({ status, pageIndex, pageSize });
+    const { items, total } = await ReportModel.findPage({ status, assetOwnerId, pageIndex, pageSize });
     const names = await namesFor(items);
 
     res.json({ itemList: items.map((report) => toReportView(report, names)), pageInfo: { pageIndex, pageSize, total } });
@@ -113,6 +117,6 @@ export const ReportController = {
   async reject(req: Request<{ id: string }>, res: Response) {
     const report = UUID.test(req.params.id) ? await ReportModel.reject(req.params.id, res.locals.userId) : null;
     if (!report) throw new HttpError(404, 'Report not found');
-    res.json(toReportView(report, await namesFor([report])));
+    res.json(toReportView(report));
   },
 };

@@ -14,4 +14,4 @@ export const reportRoutes = Router();
 reportRoutes.use(requireAuth(loadPublicKey), requireRole('ADMIN'));
 reportRoutes.get('/', ReportController.list);
 reportRoutes.get('/:id', ReportController.getById);
-reportRoutes.post('/:id/reject', ReportController.reject);
+reportRoutes.post('/:id/deny', ReportController.reject);
