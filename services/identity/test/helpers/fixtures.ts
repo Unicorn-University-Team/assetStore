@@ -45,7 +45,7 @@ export function resetData(passwordHash: string): void {
   assets.set(ids.asset, {
     id: ids.asset, ownerId: null, name: 'AUTH-3 public asset', description: '', type: '3d',
     fileKey: 'auth3/test-only', fileName: 'auth3.obj', fileSize: fileBytes.length,
-    contentType: 'application/octet-stream', downloadCount: 0,
+    contentType: 'application/octet-stream', previewKey: null, previewContentType: null, downloadCount: 0,
     createdAt: timestamp, updatedAt: timestamp,
   });
 }
