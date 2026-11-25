@@ -27,7 +27,8 @@ export const ALLOWED_EXTENSIONS: ReadonlySet<string> = new Set([
 ]);
 
 export type AssetInput = Pick<Asset, 'name' | 'description' | 'type' | 'fileKey' | 'fileName' | 'fileSize' | 'contentType'>;
-export type AssetUpdate = Pick<Asset, 'name' | 'description'>;
+// description is optional: when it is not sent, it stays as it is.
+export type AssetUpdate = Pick<Asset, 'name'> & Partial<Pick<Asset, 'description'>>;
 
 export type Actor = { id: string; role: 'USER' | 'ADMIN' };
 

@@ -20,4 +20,16 @@ export const IdentityClient = {
       return new Map();
     }
   },
+
+  // Account status of one user: 'ACTIVE', 'SUSPENDED', or null when identity does not know the user. Unlike the
+  // names this decides whether an action is allowed, so a failure is not hidden: callService throws 503/502.
+  async status(userId: string): Promise<string | null> {
+    const { itemList } = await callService<{ itemList: { id: string; status: string }[] }>(
+      env.identityUrl,
+      `/internal/users?ids=${encodeURIComponent(userId)}`,
+      { internalKey: env.internalKey },
+    );
+    // identity answers with ids in lower case.
+    return itemList.find((user) => user.id === userId.toLowerCase())?.status ?? null;
+  },
 };

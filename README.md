@@ -270,11 +270,13 @@ Když se cokoli pokazí, i když uživatel zavře stránku uprostřed nahráván
 ### Stažení: `GET /api/assets/:id/download`
 
 1. Backend najde záznam; neexistující id → **404**.
-2. Otevře soubor v S3 a zvýší `downloadCount` o 1. `downloadCount` mění jen server. Když soubor v S3 chybí,
-   odpoví **404** `The file of this asset is missing`, jiná chyba S3 → **502**.
+2. Otevře soubor v S3. Když soubor v S3 chybí, odpoví **404** `The file of this asset is missing`, jiná chyba
+   S3 → **502**.
 3. Soubor **streamuje** do prohlížeče s hlavičkou `Content-Disposition: attachment; filename="<původní jméno>"`,
    takže se stáhne pod původním jménem, a s `X-Content-Type-Options: nosniff`, aby ho prohlížeč nikdy nezobrazil
    jako stránku.
+4. Teprve po přenosu celého souboru zvýší `downloadCount` o 1 (AM `asset/download` krok 4). Přerušené nebo zrušené
+   stažení se nepočítá. `downloadCount` mění jen server.
 
 Ve frontendu stačí obyčejný odkaz s atributem `download`: `<a href={downloadUrl(asset.id)} download>Stáhnout</a>`.
 Chybová odpověď pak skončí jako nepovedené stažení v prohlížeči a stránka zůstane.
@@ -500,7 +502,7 @@ community ──GET /internal/assets/:id/exists──▶ catalog ──▶ datab
 | Služba | Cesta | Odpověď | Kdo volá |
 |---|---|---|---|
 | catalog | `GET /internal/assets/:id/exists` | `{ "exists": boolean }` | community |
-| identity | `GET /internal/users?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "id", "username", "status" }] }` (`ACTIVE` / `SUSPENDED`), neznámá id chybí | catalog (`ownerName`), community (jména v reportech, zablokovaný autor nesmí nahlásit asset) |
+| identity | `GET /internal/users?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "id", "username", "status" }] }` (`ACTIVE` / `SUSPENDED`), neznámá id chybí | catalog (`ownerName`, zablokovaný uživatel nesmí publikovat), community (jména v reportech, zablokovaný autor nesmí nahlásit asset) |
 | catalog | `GET /internal/assets?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "id", "name", "ownerId" }] }`, smazané assety chybí | community (reporty) |
 | community | `GET /internal/reviews/summaries?ids=<id>,<id>` (nejvýš 100) | `{ "itemList": [{ "assetId", "averageRating", "reviewCount" }] }`, assety bez recenzí chybí | catalog (hodnocení assetů) |
 
@@ -606,10 +608,10 @@ Endpointy mají **catalog** (assety), **identity** (přihlášení, viz [Přihl�
 | `GET` | `/api/health/<služba>` | stav služby `identity`, `catalog` nebo `community`: `{ service, status, database }` (catalog i `storage`), při chybě 503 |
 | `GET` | `/api/assets?name=&ownerId=&tagList=&pageIndex=&pageSize=` | seznam od nejnovějších, hledání v názvu bez ohledu na velikost písmen (`%` a `_` jsou obyčejné znaky); `ownerId` (uuid, jinak 400) vrátí jen assety tohoto uživatele (stránka „Moje assety“); `tagList` = názvy tagů, parametr jednou na tag (`tagList=medieval&tagList=low-poly`), vrátí jen assety, které mají **všechny** tyto tagy; stejná pravidla jako při publikaci (velikost písmen se ignoruje, nejvýš 10, neplatný název → 400), neznámý tag → prázdný seznam; stránky od 0, `pageSize` 1–100 (výchozí 20), jinak 400: `{ itemList, pageInfo: { pageIndex, pageSize, total } }` |
 | `GET` | `/api/assets/:id` | jeden asset |
-| `POST` | `/api/assets` | nahrání, `multipart/form-data`: `name`, `description`, `type`, `tagList` (nepovinné, viz [Tagy při publikaci](#tagy-při-publikaci-us-11)), `file`; potřebuje přihlášení |
-| `PUT` | `/api/assets/:id` | JSON `{ name, description, tagList? }`; `tagList` nahradí tagy (každý musí existovat, jinak **400**), bez něj zůstanou, soubor se nemění; jen vlastník, jinak **403** |
+| `POST` | `/api/assets` | nahrání, `multipart/form-data`: `name`, `description`, `type`, `tagList` (nepovinné, viz [Tagy při publikaci](#tagy-při-publikaci-us-11)), `file`; potřebuje přihlášení, zablokovaný účet (`SUSPENDED`) → **403** (AM `userSuspended`) |
+| `PUT` | `/api/assets/:id` | JSON `{ name, description?, tagList? }`; bez `description` zůstane popis beze změny; `tagList` nahradí tagy (každý musí existovat, jinak **400**), bez něj zůstanou, soubor se nemění; jen vlastník, jinak **403** |
 | `DELETE` | `/api/assets/:id` | smaže záznam i soubor; jen vlastník nebo admin, jinak **403** |
-| `GET` | `/api/assets/:id/download` | stažení souboru, `downloadCount` + 1 |
+| `GET` | `/api/assets/:id/download` | stažení souboru, `downloadCount` + 1 až po celém přenosu (přerušené stažení se nepočítá) |
 | `GET` | `/api/assets/:id/file` | soubor pro náhled (obrázek, glTF, zvuk), `inline`, Range, `downloadCount` beze změny; jiný formát **404** |
 | `POST` | `/api/tags` | nový tag (AM `tag/create`, US-1.1) `{ name }`: jen přihlášený, **201** `{ id, name }`, neplatný název **400**, existující **409** |
 | `GET` | `/api/tags?prefix=` | nápověda tagů a filtr (AM `tag/list`): nejvýš 10 tagů začínajících na `prefix` (bez ohledu na velikost písmen, nejvýš 50 znaků, jinak **400**), řazeno podle názvu: `{ itemList: [{ id, name }] }` |
