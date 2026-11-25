@@ -15,10 +15,9 @@ export type ReportStatus = (typeof REPORT_STATUSES)[number];
 export type ReportInput = {
   assetId: string;
   assetName: string;
-  assetOwnerId: string | null;
+  assetOwnerId: string;
   authorId: string;
   reason: ReportReason;
-  comment: string;
 };
 
 export const ReportModel = {
@@ -69,7 +68,7 @@ export const ReportModel = {
       // Only an open report changes; a report decided in the meantime is a 409, not a second decision.
       const { count } = await tx.report.updateMany({
         where: { id, status: 'open' },
-        data: { status: 'rejected', decidedBy: adminId, decidedAt: new Date() },
+        data: { status: 'rejected', decidedById: adminId, decidedAt: new Date() },
       });
       const report = await tx.report.findUnique({ where: { id } });
       if (!report) return null;
