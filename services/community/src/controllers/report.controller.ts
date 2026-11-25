@@ -31,6 +31,14 @@ function readStatus(value: unknown): ReportStatus | null {
   return status;
 }
 
+// report/list filter: reports on the assets of this owner. Not given = everyone's assets (null).
+function readAssetOwnerId(value: unknown): string | null {
+  if (value === undefined) return null;
+  // A repeated parameter arrives as an array, so only a single string is accepted.
+  if (typeof value !== 'string' || !UUID.test(value)) throw new HttpError(400, '"assetOwnerId" must be a uuid');
+  return value.toLowerCase();
+}
+
 // Whole number from the query string. max = null means no upper limit.
 function readInteger(field: string, value: unknown, min: number, max: number | null, fallback: number): number {
   if (value === undefined) return fallback;
@@ -86,12 +94,14 @@ export const ReportController = {
     res.status(201).json(toReportView(report));
   },
 
-  // GET /api/reports?status=&pageIndex=&pageSize= (admin): newest first, open ones by default.
+  // GET /api/reports?status=&assetOwnerId=&pageIndex=&pageSize= (admin): newest first, open ones by default;
+  // with assetOwnerId only the reports on that user's assets.
   async list(req: Request, res: Response) {
     const status = readStatus(req.query.status);
+    const assetOwnerId = readAssetOwnerId(req.query.assetOwnerId);
     const pageIndex = readInteger('pageIndex', req.query.pageIndex, 0, null, 0);
     const pageSize = readInteger('pageSize', req.query.pageSize, 1, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE);
-    const { items, total } = await ReportModel.findPage({ status, pageIndex, pageSize });
+    const { items, total } = await ReportModel.findPage({ status, assetOwnerId, pageIndex, pageSize });
     const names = await namesFor(items);
 
     res.json({ itemList: items.map((report) => toReportView(report, names)), pageInfo: { pageIndex, pageSize, total } });
