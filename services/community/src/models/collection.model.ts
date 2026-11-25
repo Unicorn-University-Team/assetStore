@@ -13,10 +13,20 @@ export const CollectionModel = {
     return prisma.collection.findMany({ where: { ownerId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
   },
 
-  get (data : {collectionId: string, ownerId: string}){
+  get (data : {collectionId: string, ownerId: string, pageIndex: number, pageSize: number}){
     return prisma.collection.findUnique({
       where: {id: data.collectionId , ownerId: data.ownerId}, 
-      include: {assets : true}
+      include: {assets : {
+        skip: data.pageIndex * data.pageSize,
+        take: data.pageSize,
+        orderBy: [{addedAt: 'asc'}, {assetId: 'asc'}]
+      },
+  }})
+  },
+
+  count(collectionId : string){
+    return prisma.collectionAsset.count({
+      where: {collectionId}
     })
   }
 };

@@ -7,6 +7,17 @@ const NAME_MAX_LENGTH = 100;
 const DESCRIPTION_MAX_LENGTH = 2000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Whole number from the query string. max = null means no upper limit.
+function readInteger(field: string, value: unknown, min: number, max: number | null, fallback: number): number {
+  if (value === undefined) return fallback;
+  const number = typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : NaN;
+  if (!Number.isSafeInteger(number) || number < min || (max !== null && number > max)) {
+    const range = max === null ? `>= ${min}` : `from ${min} to ${max}`;
+    throw new HttpError(400, `"${field}" must be an integer ${range}`);
+  }
+  return number;
+}
+
 // Required, trimmed, 1 to 100 characters.
 function readName(value: unknown): string {
   const name = typeof value === 'string' ? value.trim() : '';
@@ -69,11 +80,17 @@ export const CollectionController = {
     const ownerId : string = res.locals.userId;
     const collectionId = readId(req.params.id);
 
-    const collection = await CollectionModel.get({collectionId, ownerId}); //returns one collection
+    const pageIndex = readInteger('pageIndex',req.query.pageIndex, 0, null, 0);
+    const pageSize= readInteger('pageSize',req.query.pageSize, 1, 100, 20);
+
+    const collection = await CollectionModel.get({collectionId, ownerId, pageIndex, pageSize}); //returns one collection
     if(collection === null) {
       throw new HttpError(404, 'collection not found.');
     }
-    const assetIds= collection.assets.map((assets)=> assets.assetId); //returns [] of assets ids
+
+    const total = await CollectionModel.count(collectionId)
+
+    const assetIds = collection.assets.map((assets)=> assets.assetId); //returns [] of asset ids
 
     const assetSummaries = await CatalogClient.assetSummaries(assetIds); //returns Map with assetId, name, ownerId, type
     const assetList = assetIds
@@ -81,13 +98,19 @@ export const CollectionController = {
       .get(assetId)).filter((asset) =>  asset !== undefined) // filter non-undefined values
       .map((asset)=> ({id: asset.id, name: asset.name, type: asset.type})); // form a DTO
 
+
     return res.status(200).json({
       id: collection.id, 
       ownerId: collection.ownerId, 
       name: collection.name, 
       description: collection.description, 
       createdAt: collection.createdAt, 
-      assetList})
+      assetList,
+      pageInfo:{
+        pageIndex,
+        pageSize,
+        total
+      }})
 
   }
 };

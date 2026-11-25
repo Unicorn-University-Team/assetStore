@@ -82,6 +82,7 @@ model CollectionAsset {
 
   @@id([collectionId, assetId])
   @@index([assetId])
+  @@index([collectionId, addedAt, assetId])
   @@map("collection_asset")
 }
 
