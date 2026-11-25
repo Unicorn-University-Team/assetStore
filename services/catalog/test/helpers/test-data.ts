@@ -74,6 +74,8 @@ export function seedAsset(): Asset {
     fileName: fixtureFileName,
     fileSize: fixtureBytes.length,
     contentType: 'application/octet-stream',
+    previewKey: null,
+    previewContentType: null,
     downloadCount: 7,
     createdAt: new Date('2026-01-01T00:00:00Z'),
     updatedAt: new Date('2026-01-01T00:00:00Z'),
