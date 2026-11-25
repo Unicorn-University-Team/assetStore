@@ -239,7 +239,7 @@ prohlížeč ──multipart──▶ Caddy ──▶ catalog ──▶ busboy �
 5. **Kontrola polí** (`name` 1–100 znaků, `type` jeden z `2d`, `3d`, `map`, `sound`, `environment`, `description`
    do 2000 znaků, tagy podle [Tagy při publikaci](#tagy-při-publikaci-us-11)) proběhne po uložení souboru. Když něco
    nesedí, soubor se z S3 hned smaže a odpověď je **400**.
-6. **Záznam v databázi** se vytvoří, až když je soubor v S3: asset, chybějící tagy, vazby `asset_tag` a audit
+6. **Záznam v databázi** se vytvoří, až když je soubor v S3: asset, vazby `asset_tag` a audit
    `assetCreated` v jedné transakci. Odpověď **201** s novým assetem.
 
 ### Tagy při publikaci (US-1.1)
@@ -251,12 +251,18 @@ nebo jedno pole s JSON polem (`-F 'tagList=["medieval","low-poly"]'`). Bez `tagL
 2. Název musí mít 1–50 znaků: latinka, číslice, pomlčka (BR-05). Jinak **400** se jménem tagu a **nic** se nevytvoří:
    ani asset, ani žádný tag.
 3. Nejvýš 10 tagů na asset, jinak **400**.
-4. Existující tag se použije znovu (BR-03), chybějící se vytvoří (BR-02). Dva současné požadavky se stejným novým tagem
-   vytvoří jeden tag a oba projdou (`INSERT … ON CONFLICT DO NOTHING`), žádná 500.
-5. Potvrzení „vytvořit nový tag?“ řeší frontend; backend vytvoří všechny tagy, které v `tagList` přišly.
+4. Každý tag musí už existovat (AM `asset/create` krok 3), jinak **400** `Tag "<název>" does not exist; create it first`
+   a nic se neuloží. Chybějící tag se nejdřív vytvoří přes `POST /api/tags` (AM `tag/create`).
+5. Potvrzení „vytvořit nový tag?“ řeší frontend (`TagInput`): po potvrzení zavolá `POST /api/tags` a teprve potom
+   dá tag k assetu.
+
+`POST /api/tags` `{ "name": "Low-Poly" }` (jen přihlášený, jinak **401**): název se ořízne a převede na malá písmena,
+pravidla jako v bodě 2 (jinak **400**). Odpověď **201** `{ id, name }`, existující název **409**
+`Tag "<název>" already exists`. Dva současné požadavky se stejným novým názvem dají jeden tag a jednu 409, žádnou 500
+(`INSERT … ON CONFLICT DO NOTHING`).
 
 Pravidla jsou v `services/catalog/src/utils/tags.ts` (testy `npm test` v `services/catalog`), uložení
-v `AssetModel.setTags()`: stejnou funkci použije úprava assetu (US-2). Smazání assetu smaže jeho vazby, tagy zůstanou.
+v `AssetModel.setTags()` (bere jen existující tagy, `TagModel.findExisting`): stejnou funkci použije úprava assetu (US-2). Smazání assetu smaže jeho vazby, tagy zůstanou.
 
 Když se cokoli pokazí, i když uživatel zavře stránku uprostřed nahrávání, v S3 nic nezůstane. Případné nedokončené
 části multipart uploadu navíc po 1 dni smaže lifecycle pravidlo bucketu.
@@ -325,8 +331,8 @@ s touto zprávou.
 ```bash
 curl -b cookies.txt -F name='Meč' -F type=3d -F description='Low poly' -F tagList=medieval -F file=@sword.glb http://localhost:3002/api/assets
 curl 'http://localhost:3002/api/assets?name=meč&pageIndex=0&pageSize=20'
-curl -b cookies.txt 'http://localhost:3002/api/assets/my'      # moje assety (My assets), jen přihlášený
-curl 'http://localhost:3002/api/assets?ownerId=<id uživatele>'   # assety jednoho uživatele
+curl 'http://localhost:3002/api/assets?ownerId=<id uživatele>'   # assety jednoho uživatele (i My assets)
+curl -b cookies.txt -H 'Content-Type: application/json' -d '{"name":"medieval"}' http://localhost:3002/api/tags   # nový tag
 curl 'http://localhost:3002/api/assets?tagList=medieval&tagList=low-poly'   # jen assety se všemi těmito tagy
 curl -OJ http://localhost:3002/api/assets/<id>/download     # uloží soubor pod původním jménem
 curl -b cookies.txt -X DELETE http://localhost:3002/api/assets/<id>
@@ -599,13 +605,13 @@ Endpointy mají **catalog** (assety), **identity** (přihlášení, viz [Přihl�
 |---|---|---|
 | `GET` | `/api/health/<služba>` | stav služby `identity`, `catalog` nebo `community`: `{ service, status, database }` (catalog i `storage`), při chybě 503 |
 | `GET` | `/api/assets?name=&ownerId=&tagList=&pageIndex=&pageSize=` | seznam od nejnovějších, hledání v názvu bez ohledu na velikost písmen (`%` a `_` jsou obyčejné znaky); `ownerId` (uuid, jinak 400) vrátí jen assety tohoto uživatele (stránka „Moje assety“); `tagList` = názvy tagů, parametr jednou na tag (`tagList=medieval&tagList=low-poly`), vrátí jen assety, které mají **všechny** tyto tagy; stejná pravidla jako při publikaci (velikost písmen se ignoruje, nejvýš 10, neplatný název → 400), neznámý tag → prázdný seznam; stránky od 0, `pageSize` 1–100 (výchozí 20), jinak 400: `{ itemList, pageInfo: { pageIndex, pageSize, total } }` |
-| `GET` | `/api/assets/my?pageIndex=&pageSize=` | US-1 „My assets“ (AM `asset/listMy`): jen assety přihlášeného uživatele (vlastník z tokenu), od nejnovějších, stránkování jako u seznamu; bez přihlášení **401**, žádné assety = prázdný `itemList` |
 | `GET` | `/api/assets/:id` | jeden asset |
 | `POST` | `/api/assets` | nahrání, `multipart/form-data`: `name`, `description`, `type`, `tagList` (nepovinné, viz [Tagy při publikaci](#tagy-při-publikaci-us-11)), `file`; potřebuje přihlášení |
-| `PUT` | `/api/assets/:id` | JSON `{ name, description, tagList? }`; `tagList` nahradí tagy (chybějící tag se vytvoří, US-1.1), bez něj zůstanou, soubor se nemění; jen vlastník, jinak **403** |
+| `PUT` | `/api/assets/:id` | JSON `{ name, description, tagList? }`; `tagList` nahradí tagy (každý musí existovat, jinak **400**), bez něj zůstanou, soubor se nemění; jen vlastník, jinak **403** |
 | `DELETE` | `/api/assets/:id` | smaže záznam i soubor; jen vlastník nebo admin, jinak **403** |
 | `GET` | `/api/assets/:id/download` | stažení souboru, `downloadCount` + 1 |
 | `GET` | `/api/assets/:id/file` | soubor pro náhled (obrázek, glTF, zvuk), `inline`, Range, `downloadCount` beze změny; jiný formát **404** |
+| `POST` | `/api/tags` | nový tag (AM `tag/create`, US-1.1) `{ name }`: jen přihlášený, **201** `{ id, name }`, neplatný název **400**, existující **409** |
 | `GET` | `/api/tags?prefix=` | nápověda tagů a filtr (AM `tag/list`): nejvýš 10 tagů začínajících na `prefix` (bez ohledu na velikost písmen, nejvýš 50 znaků, jinak **400**), řazeno podle názvu: `{ itemList: [{ id, name }] }` |
 
 Asset v odpovědi (`services/catalog/src/views/asset.view.ts`). `ownerId` je id uživatele z identity (u starých
@@ -613,7 +619,7 @@ assetů `null`), `ownerName` jeho uživatelské jméno: catalog se na jména pt�
 viz [Komunikace mezi službami](#komunikace-mezi-službami)). Když identity neodpoví, je `ownerName` `null` a katalog
 funguje dál. `previewUrl` je adresa náhledu u obrázků do 5 MB (jinak `null`, viz [Náhled](#náhled-get-apiassetsidfile)).
 `tagList` jsou názvy tagů podle abecedy. `averageRating` (na jedno desetinné místo) a `reviewCount` v `GET /api/assets`,
-`GET /api/assets/my`, `GET /api/assets/:id` a `PUT /api/assets/:id` počítá community (jedno volání
+`GET /api/assets/:id` a `PUT /api/assets/:id` počítá community (jedno volání
 `GET /internal/reviews/summaries` na odpověď). Bez recenzí, nebo když community neodpoví, je `averageRating` `null`
 a `reviewCount` 0 a katalog funguje dál. Nový asset z `POST /api/assets` recenze ještě nemá, proto vrací `null` a 0:
 

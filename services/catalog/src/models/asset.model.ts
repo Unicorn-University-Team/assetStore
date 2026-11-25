@@ -93,14 +93,14 @@ export const AssetModel = {
   // US-1.1: links the asset to exactly these tags (normalized names, see normalizeTagList); missing tags are created.
   // In the caller's transaction, so a failure undoes the asset change too. Shared by create and, later, edit (US-2).
   async setTags(tx: Prisma.TransactionClient, assetId: string, names: string[]): Promise<void> {
-    const tags = await TagModel.findOrCreate(tx, names);
+    const tags = await TagModel.findExisting(tx, names);
     await tx.assetTag.deleteMany({ where: { assetId, tagId: { notIn: tags.map((tag) => tag.id) } } });
     await tx.assetTag.createMany({ data: tags.map((tag) => ({ assetId, tagId: tag.id })), skipDuplicates: true });
   },
 
   // Creating, updating and deleting write an audit log entry in the same transaction:
   // if the entry cannot be written, the change is undone (README, Audit log, rule 1).
-  // The asset, its tags (new ones created) and the audit entry are saved together or not at all (US-1.1).
+  // The asset, its tags (all must exist, AM tagDoesNotExist) and the audit entry are saved together or not at all.
   create(input: AssetInput, tagNames: string[], actor: Actor): Promise<AssetWithTags> {
     return prisma.$transaction(async (tx) => {
       const asset = await tx.asset.create({ data: { ...input, ownerId: actor.id } });
@@ -127,7 +127,7 @@ export const AssetModel = {
       const { count } = await tx.asset.updateMany({ where: { id }, data: input });
       if (count === 0) return null;
 
-      // US-2: the tags are replaced like at publishing; a missing tag is created (US-1.1), names in lower case.
+      // US-2: the tags are replaced like at publishing; every tag must exist (AM asset/update step 6).
       if (tagNames !== null) await AssetModel.setTags(tx, id, tagNames);
 
       const after = await tx.asset.findUniqueOrThrow({ where: { id }, include: withTags });

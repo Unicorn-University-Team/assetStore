@@ -117,21 +117,6 @@ export const AssetController = {
     res.json({ itemList: items.map((asset) => toAssetView(asset, ownerNames, ratings)), pageInfo: { pageIndex, pageSize, total } });
   },
 
-  // GET /api/assets/my (AM asset/listMy, US-1 "My assets"): only the logged-in user's assets, newest first, the same
-  // paging as asset/list. The owner always comes from the token, never from the request.
-  async listMy(req: Request, res: Response) {
-    const actor = readActor(res);
-    const pageIndex = readInteger('pageIndex', req.query.pageIndex, 0, null, 0);
-    const pageSize = readInteger('pageSize', req.query.pageSize, 1, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE);
-    const { items, total } = await AssetModel.findPage({ name: '', ownerId: actor.id, tagNames: [], pageIndex, pageSize });
-
-    const [ownerNames, ratings] = await Promise.all([
-      IdentityClient.usernames([actor.id]),
-      CommunityClient.ratings(items.map((asset) => asset.id)),
-    ]);
-    res.json({ itemList: items.map((asset) => toAssetView(asset, ownerNames, ratings)), pageInfo: { pageIndex, pageSize, total } });
-  },
-
   async getById(req: Request<IdParams>, res: Response) {
     const asset = await findAsset(req.params.id);
     const [ownerNames, ratings] = await Promise.all([
