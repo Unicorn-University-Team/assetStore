@@ -318,6 +318,62 @@
       ]
     },
     {
+      "name": "Users (admin)",
+      "item": [
+        {
+          "name": "List suspended",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "AM user/list (US-8): admins only. status active or suspended (optional).",
+            "url": {
+              "raw": "{{baseUrl}}/api/users?status=suspended&pageIndex=0&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "suspended"
+                },
+                {
+                  "key": "pageIndex",
+                  "value": "0"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "AM user/get: admins only. Uses userId (set by Auth / Me).",
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{userId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "Assets",
       "item": [
         {

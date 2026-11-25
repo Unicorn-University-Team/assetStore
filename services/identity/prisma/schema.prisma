@@ -29,11 +29,28 @@ model User {
   passwordHash String    @map("password_hash") @db.VarChar(255)
   role         Role      @default(USER)
   status       Status    @default(ACTIVE)
+  // AM userAccount: accepted reports on the user's assets (US-6), changed only by the system; at 5 the account is
+  // suspended and suspendedAt is set (user/addViolation).
+  confirmedViolations Int         @default(0) @map("confirmed_violations")
+  suspendedAt         DateTime?   @map("suspended_at")
+  violations          Violation[]
   sessions     Session[]
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
   @@map("user_account")
+}
+
+// One confirmed violation = one accepted report (AM report/accept step 4: "a report is counted only once"). The
+// report id is the key, so adding the same report twice counts once and user/removeViolation takes back exactly it.
+model Violation {
+  reportId  String   @id @map("report_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("user_violation")
 }
 
 // One login on one device. Only the SHA-256 hash of the refresh token is stored.

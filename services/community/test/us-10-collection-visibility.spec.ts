@@ -58,7 +58,7 @@ describe('US-10 — private collections and required name', () => {
     for (const id of [userA, userB]) {
       users.set(id, {
         id, username: `us10-${id}`, email: `${id}@us10.example.test`, passwordHash,
-        role: 'USER', status: 'ACTIVE', createdAt: new Date(), updatedAt: new Date(),
+        role: 'USER', status: 'ACTIVE', confirmedViolations: 0, suspendedAt: null, createdAt: new Date(), updatedAt: new Date(),
       });
     }
     cookieA = await login(userA);
