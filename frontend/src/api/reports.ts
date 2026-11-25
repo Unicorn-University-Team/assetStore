@@ -19,7 +19,7 @@ export type ReportStatusFilter = ReportStatus | 'all'
 // adds them (AM 4.24), so they are optional here.
 export type Report = {
   id: string
-  assetId: string | null
+  assetId: string | null // null: the asset was deleted, a resolved report is kept as history
   assetName: string | null
   assetOwnerId: string | null
   assetOwnerName?: string | null

@@ -4,6 +4,7 @@ import type { Report } from '../models/report.model';
 // come from identity and are null when the user no longer exists or identity did not answer.
 export interface ReportView {
   id: string;
+  // Null when the asset was deleted and this resolved report was kept as history; assetName still has its name.
   assetId: string | null;
   assetName: string;
   assetOwnerId: string | null;

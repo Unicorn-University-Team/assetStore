@@ -15,6 +15,10 @@ vi.mock('../src/clients/identity.client', async () => ({
     status: async () => 'ACTIVE',
   },
 }));
+// asset/delete step 5 asks community to delete the reviews, collection links and reports (#54); not part of this test.
+vi.mock('../src/clients/community.client', () => ({
+  CommunityClient: { ratings: async () => new Map(), deleteAssetContent: async () => undefined },
+}));
 const stored = vi.hoisted(() => new Map<string, Buffer>());
 vi.mock('../src/storage/file-storage', () => ({
   FileStorage: {

@@ -1,4 +1,4 @@
-import { callService } from '@assetstore/shared';
+import { callService, HttpError } from '@assetstore/shared';
 import { env } from '../config/env';
 
 export interface AssetRating {
@@ -25,6 +25,21 @@ export const CommunityClient = {
     } catch {
       // callService has logged the details already.
       return new Map();
+    }
+  },
+
+  // US-3, AM asset/delete step 5: community deletes the reviews, the collection links and the open and rejected
+  // reports of a deleted asset; resolved reports stay as history. Unlike ratings this must not be skipped, so a
+  // failure is an error of the delete (AM communityCallFailed); callService has logged the details.
+  async deleteAssetContent(assetId: string): Promise<void> {
+    try {
+      await callService(env.communityUrl, `/internal/assets/${encodeURIComponent(assetId)}`, {
+        internalKey: env.internalKey,
+        method: 'DELETE',
+      });
+    } catch (error) {
+      const status = error instanceof HttpError ? error.status : 502;
+      throw new HttpError(status, 'Deleting the reviews, collection items and reports of the asset failed');
     }
   },
 };

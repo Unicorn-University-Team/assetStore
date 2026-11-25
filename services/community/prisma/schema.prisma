@@ -16,6 +16,7 @@ datasource db {
 // Store their IDs and a copy of the asset name to preserve report history.
 model Report {
   id           String    @id @default(uuid()) @db.Uuid
+  // Null for a resolved report whose asset was deleted: it stays as moderation history (AM report DAO deleteByAsset).
   assetId      String?   @map("asset_id") @db.Uuid
   // Copy of the asset name when it was reported, kept for the history after the asset is deleted (AM reportSchema).
   assetName    String    @map("asset_name") @db.VarChar(100)

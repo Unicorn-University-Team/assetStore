@@ -243,12 +243,17 @@ export const AssetController = {
     const asset = UUID.test(req.params.id) ? await AssetModel.remove(req.params.id, actor) : null;
     if (!asset) throw new HttpError(404, 'Asset not found');
 
+    // AM asset/delete step 5: community removes what refers to the asset. A failure is the error of this request
+    // (communityCallFailed), but only after the files are removed: the row is gone, so nothing would remove them later.
+    const community = await CommunityClient.deleteAssetContent(asset.id).then(() => null, (error: unknown) => error);
+
     // The database row is gone already; a leftover file only costs storage, so log and carry on (AM asset/delete
     // step 6: the file and the preview).
     await FileStorage.remove(asset.fileKey).catch((error: unknown) => {
       console.error(`Could not delete ${asset.fileKey} from S3`, error);
     });
     await removePreview(asset);
+    if (community) throw community;
     res.status(204).end();
   },
 
