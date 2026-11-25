@@ -45,7 +45,7 @@ describe('US-9 — asset download', () => {
     userId = randomUUID();
     users.set(userId, {
       id: userId, username: 'us9-test-user', email: 'us9@example.test', passwordHash,
-      role: 'USER', status: 'ACTIVE', createdAt: new Date(), updatedAt: new Date(),
+      role: 'USER', status: 'ACTIVE', confirmedViolations: 0, suspendedAt: null, createdAt: new Date(), updatedAt: new Date(),
     });
 
     // Fail closed for any unexpected S3 operation/key. Never invoke the SDK transport.
