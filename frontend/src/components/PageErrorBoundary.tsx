@@ -4,7 +4,6 @@ import StatusMessage from './StatusMessage'
 type Props = { children: ReactNode }
 type State = { failed: boolean }
 
-// A page that throws still keeps the header and footer. The layout remounts this on navigation, which clears it.
 export default class PageErrorBoundary extends Component<Props, State> {
   state: State = { failed: false }
 
