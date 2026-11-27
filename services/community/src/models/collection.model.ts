@@ -13,9 +13,9 @@ export const CollectionModel = {
     return prisma.collection.findMany({ where: { ownerId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
   },
 
-  get (data : {collectionId: string, ownerId: string, pageIndex: number, pageSize: number}){
+  get (data : {collectionId: string, pageIndex: number, pageSize: number}){
     return prisma.collection.findUnique({
-      where: {id: data.collectionId , ownerId: data.ownerId}, 
+      where: {id: data.collectionId},
       include: {assets : {
         skip: data.pageIndex * data.pageSize,
         take: data.pageSize,

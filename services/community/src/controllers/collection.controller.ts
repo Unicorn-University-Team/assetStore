@@ -77,18 +77,18 @@ export const CollectionController = {
 
   // returns the collection; the system checks that the user is its owner
   async get(req: Request, res: Response){
-    const ownerId : string = res.locals.userId;
     const collectionId = readId(req.params.id);
 
     const pageIndex = readInteger('pageIndex',req.query.pageIndex, 0, null, 0);
     const pageSize= readInteger('pageSize',req.query.pageSize, 1, 100, 20);
 
-    const collection = await CollectionModel.get({collectionId, ownerId, pageIndex, pageSize}); //returns one collection
+    const collection = await CollectionModel.get({collectionId, pageIndex, pageSize}); //returns one collection
     if(collection === null) {
       throw new HttpError(404, 'collection not found.');
     }
+    if(collection.ownerId !== res.locals.userId) throw new HttpError(403, 'user is not a collection owner.')
 
-    const total = await CollectionModel.count(collectionId)
+    const total = await CollectionModel.count(collectionId);
 
     const assetIds = collection.assets.map((assets)=> assets.assetId); //returns [] of asset ids
 

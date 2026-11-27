@@ -143,18 +143,15 @@ describe('US-10 — private collections and required name', () => {
     });
   });
 
-  it.skip('TC-US10-05 details: NOT EXECUTED — no collection detail route exists in routes or README', () => {});
-
   it('TC-US10-06: B sees only B collections; direct ID probe returns no private data', async () => {
     const privateA = await createValid();
     expect(await list(cookieB)).toEqual([]);
     const ownB = await createValid(cookieB, 'B private collection');
     expect(await list(cookieB)).toEqual([ownB]);
-    // Negative URL probe only: this is NOT an implemented collection detail API.
     const path = `/api/collections/${privateA.id}`;
     const response = await request(community.url, path, { headers: { Cookie: cookieB } });
-    expect(response.status).toBe(404);
-    expect(await response.json()).toEqual({ error: `Route GET ${path} not found` });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: 'user is not a collection owner.' });
     expect(collections.size).toBe(2);
   });
 
