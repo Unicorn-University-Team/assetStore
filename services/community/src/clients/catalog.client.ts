@@ -1,7 +1,7 @@
 import { callService } from '@assetstore/shared';
 import { env } from '../config/env';
 
-export type AssetSummary = { id: string; name: string; ownerId: string | null };
+export type AssetSummary = { id: string; name: string; ownerId: string | null; type: string };
 
 // Questions community asks the catalog service. Its database is not ours, so we ask over HTTP.
 export const CatalogClient = {

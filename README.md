@@ -57,7 +57,7 @@ Backend jsou tři samostatné služby. Každá má **vlastní databázi** a do c
 |---|---|---|---|---|
 | **identity** | uživatelé, refresh tokeny | AUTH-1…3, ADM-1, ADM-2 | `/api/auth/*`, `/api/users/*` | 3001 |
 | **catalog** | assety, tagy, soubory v S3 | AST-1…7, TAG-1…2 | `/api/assets/*`, `/api/tags/*` | 3002 |
-| **community** | recenze, kolekce, reporty | REV-1…3, COL-1…2, REP-1…3 | `/api/assets/:id/reviews`, `/api/assets/:id/reports`, `/api/reviews/*`, `/api/collections/*`, `/api/reports/*` | 3003 |
+| **community** | recenze, kolekce, reporty | REV-1…3, COL-1…2, REP-1…3 | `/api/assets/:id/reviews`, `/api/assets/:id/reports`, `/api/reviews/*`, `/api/collections/*` (včetně `GET /api/collections/:id`), `/api/reports/*` | 3003 |
 
 ```
 prohlížeč ──▶ Caddy (API gateway, HTTPS)

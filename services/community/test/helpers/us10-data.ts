@@ -11,6 +11,7 @@ export const testEnv = {
 };
 export const collections = new Map<string, Collection>();
 
+
 export const communityPrisma = {
   collection: {
     create: vi.fn(async ({ data }: { data: Pick<Collection, 'ownerId' | 'name' | 'description'> }) => {
@@ -22,17 +23,25 @@ export const communityPrisma = {
       where: { ownerId: string };
       orderBy: Array<Record<string, 'desc'>>;
     }) => {
-      // Honor the real query; a missing owner filter must not silently pass privacy tests.
       const rows = [...collections.values()].filter((row) => !where || row.ownerId === where.ownerId);
       if (orderBy) rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id));
       return rows.map((row) => ({ ...row }));
+    }),
+    findUnique: vi.fn(async (data: { where: { id: string } }) => {
+      const row = collections.get(data.where.id);
+      if (!row) return null;
+      return { ...row, assets: [] };
     }),
   },
   collectionAsset: {
     create: vi.fn(() => { throw new Error('A newly created collection must have no asset links'); }),
     createMany: vi.fn(() => { throw new Error('A newly created collection must have no asset links'); }),
+    count: vi.fn(async ({ where }: { where: { collectionId: string } }) => {
+      return collections.has(where.collectionId) ? 0 : 0;
+    }),
   },
 };
+
 
 // Keep account status observable without real service I/O. Authentication is never mocked.
 export const identityClient = {

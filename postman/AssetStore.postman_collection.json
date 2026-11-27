@@ -920,6 +920,45 @@
               }
             }
           ]
+        },
+        {"name": "Get",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/collections/{{collectionId}}?pageIndex=0&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "collections",
+                "{{collectionId}}"
+              ],
+              "query": [
+              {
+               "key": "pageIndex",
+                "value": "0"
+              },
+            {
+              "key": "pageSize",
+              "value": "20"
+            }
+          ]
+        },
+          "description": "Get a collection owned by the logged-in user. Needs Login. Returns 403 for another user's collection and 404 if the collection does not exist. Pagination: pageIndex starts at 0, pageSize from 1 to 100."
+        },
+          "event": [
+            {
+              "listen": "test",
+               "script": {
+                "type": "text/javascript",
+                  "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                  ]
+                }
+            }
+          ]
         }
       ]
     },
