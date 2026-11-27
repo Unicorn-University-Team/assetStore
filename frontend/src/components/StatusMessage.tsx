@@ -11,7 +11,6 @@ type StatusMessageProps = {
   children?: ReactNode
 }
 
-// One look for loading, nothing-to-show, a failed request, and a page that is not there.
 export default function StatusMessage({ kind, title, message, heading = 'h2', code, children }: StatusMessageProps) {
   const Title = heading
   return (

@@ -319,6 +319,34 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .tag-suggestion.tag-create { border-top: 1px solid #d9e2ff; font-weight: 500; }
 .tag-suggestion.tag-create strong { font-weight: 700; }
 
+/* US-4: average, review form and the list on the asset page. */
+.review-summary { display: flex; align-items: center; gap: 14px; margin: 4px 0 20px; }
+.review-average { margin: 0; color: #111; font: 400 42px/1 'Archivo Black', Impact, sans-serif; letter-spacing: -.04em; }
+.review-summary p { margin: 4px 0 0; color: #777; font-size: 12px; }
+.review-empty, .review-note { margin: 0 0 16px; color: #555; font-size: 13px; }
+.review-note a { color: #3355e0; font-weight: 600; }
+.review-stars { color: #d0d0d0; letter-spacing: 1px; font-size: 14px; }
+.review-stars .is-on { color: #111; }
+.review-form { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 0 0 8px; padding: 16px; border-radius: 12px; background: #f6f7f8; }
+.review-form h3 { margin: 0 0 4px; font-size: 14px; font-weight: 700; }
+.review-form .error-box { width: 100%; margin: 0; }
+.review-label, .review-form label { color: #222; font-size: 13px; font-weight: 600; }
+.review-form textarea { width: 100%; min-height: 76px; padding: 10px 12px; border: 1px solid #e4e4e4; border-radius: 8px; color: #111; background: #fff; font-size: 14px; resize: vertical; }
+.review-form textarea:focus { border-color: #3355e0; outline: none; }
+.star-input { display: flex; gap: 2px; }
+.star-input button { width: 28px; height: 28px; padding: 0; border: 0; background: transparent; color: #d0d0d0; font-size: 22px; line-height: 1; cursor: pointer; }
+.star-input button.is-on { color: #111; }
+.star-input button:disabled { cursor: default; }
+.review-form-actions { align-self: flex-end; }
+.review-form-actions .button { min-height: 36px; padding-inline: 18px; border-radius: 999px; }
+.review-list { margin: 8px 0 0; padding: 0; list-style: none; }
+.review-item { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 12px; padding: 14px 0; border-top: 1px solid #eee; }
+.review-avatar { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; color: #3355e0; background: #e7eeff; font-size: 13px; font-weight: 700; }
+.review-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
+.review-meta time { color: #888; font-size: 12px; }
+.review-comment { margin: 6px 0 0; color: #333; font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.review-more { margin-top: 12px; }
+
 /* Shared Admin layout & navigation styles (Authentication & roles / US-6, US-7, US-8) */
 .admin-badge { padding: 3px 8px; border: 1px solid #5c4a14; border-radius: 4px; color: #e8b94a; background: #2b2410; font-size: 11px; font-weight: 700; }
 .admin-nav { flex: 1; display: flex; align-items: center; gap: 22px; margin-left: 8px; }

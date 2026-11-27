@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { apiGet, describeFailure } from '../api/client'
 import type { Asset } from '../api/assets'
 import AssetPreview from '../components/AssetPreview'
+import AssetReviews from '../components/AssetReviews'
 import ReportAsset from '../components/ReportAsset'
 import StatusMessage from '../components/StatusMessage'
 import LiveCount from '../components/LiveCount'
@@ -58,6 +59,12 @@ export default function AssetDetailPage() {
     setRetryKey((value) => value + 1)
   }
 
+  function applySummary(averageRating: number | null, reviewCount: number) {
+    setLoaded((previous) => previous?.id === id && previous.asset
+      ? { ...previous, asset: { ...previous.asset, averageRating, reviewCount } }
+      : previous)
+  }
+
   // The file comes as a plain download (no fetch). The number goes up at once; the server counts the download before
   // it sends the file, so a moment later the asset is read again: a download that failed (e.g. a missing file) goes
   // back to the real number, and downloads by other people meanwhile are added.
@@ -103,7 +110,16 @@ export default function AssetDetailPage() {
           </div>
           <div className="detail-tabs"><button type="button" className={section === 'overview' ? 'active' : undefined} onClick={() => showSection('overview')}>Overview</button><button type="button" className={section === 'reviews' ? 'active' : undefined} onClick={() => showSection('reviews')}>Reviews ({asset.reviewCount})</button></div>
           <section className="detail-section" id="asset-overview"><p className="eyebrow">About this asset</p><h2>Overview</h2><p className="detail-description">{asset.description || 'The creator has not added a description yet.'}</p>{asset.tagList.length > 0 && <div className="asset-tags" aria-label="Tags">{asset.tagList.map((tag) => <span className="asset-tag" key={tag}>{tag}</span>)}</div>}</section>
-          <section className="detail-section reviews-section" id="asset-reviews"><div><p className="eyebrow">From the community</p><h2>Reviews</h2></div><div className="reviews-placeholder">{asset.averageRating == null ? <><span className="empty-star">✳</span><strong>No reviews yet</strong><p>Ratings will show up here after people have used this asset.</p></> : <><strong>★ {asset.averageRating.toFixed(1)} average rating</strong><p>Based on {asset.reviewCount} {asset.reviewCount === 1 ? 'review' : 'reviews'}.</p></>}</div></section>
+          <section className="detail-section reviews-section" id="asset-reviews">
+            <h2>Reviews</h2>
+            <AssetReviews
+              assetId={asset.id}
+              ownerId={asset.ownerId}
+              averageRating={asset.averageRating}
+              reviewCount={asset.reviewCount}
+              onSummary={applySummary}
+            />
+          </section>
         </section>
         <aside className="asset-sidebar">
           <p className="eyebrow">{typeName} asset</p><h1>{asset.name}</h1><p className="asset-owner">{asset.ownerName ? `By ${asset.ownerName}` : 'Shared by the community'}</p>
