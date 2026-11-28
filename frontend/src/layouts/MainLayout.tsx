@@ -138,6 +138,7 @@ function WorkspaceHeader() {
               <div className="workspace-menu-panel" id={menuId}>
                 <NavLink to="/my/assets" end className={({ isActive }) => isActive ? 'active' : undefined} onClick={() => setMenuPath(null)}>My assets</NavLink>
                 <NavLink to="/my/assets/new" className={({ isActive }) => isActive ? 'active' : undefined} onClick={() => setMenuPath(null)}>New asset</NavLink>
+                <NavLink to="/my/collections" className={({ isActive }) => isActive ? 'active' : undefined} onClick={() => setMenuPath(null)}>My collections</NavLink>
                 <NavLink to="/" end onClick={() => setMenuPath(null)}>Catalogue</NavLink>
                 <div className="menu-sep" />
                 <button type="button" onClick={() => { void onLogout() }} disabled={busy}>Log out</button>
