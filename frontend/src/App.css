@@ -329,7 +329,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .admin-header .header-account { margin-left: auto; }
   .admin-header .header-user-name { display: none; }
 }
-/* Bordered collection list: title with description (max 2 lines) on the left, fixed item count on the right */.collection-list { margin: 0; padding: 0; list-style: none; border: 1px solid #e8e8e8; border-radius: 6px; }
+/* Bordered collection list: title with description (max 2 lines) on the left, fixed item count on the right */
+.collection-list { margin: 0; padding: 0; list-style: none; border: 1px solid #e8e8e8; border-radius: 6px; }
 .collection-list li { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 18px; }
 .collection-list li + li { border-top: 1px solid #e8e8e8; }
 .collection-main { min-width: 0; }
