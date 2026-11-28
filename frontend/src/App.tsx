@@ -13,6 +13,7 @@ import NewAssetPage from './pages/NewAssetPage'
 import EditAssetPage from './pages/EditAssetPage'
 import NotFoundPage from './pages/NotFoundPage'
 import ReportDetailPage from './pages/ReportDetailPage'
+import MyCollectionsPage from './pages/MyCollectionsPage'
 
 export default function App() {
   return (
@@ -31,6 +32,7 @@ export default function App() {
               <Route path="my/assets" element={<MyAssetsPage />} />
               <Route path="my/assets/new" element={<NewAssetPage />} />
               <Route path="my/assets/:id/edit" element={<EditAssetPage />} />
+              <Route path="my/collections" element={<MyCollectionsPage />} />
               <Route path="my/*" element={<NotFoundPage />} />
               <Route element={<RequireAdmin />}>
                 <Route path="admin" element={<Navigate to="/admin/reports" replace />} />
